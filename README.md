@@ -1,0 +1,1 @@
+# smart-blind-stick-ai-assistance-sos-btmc
