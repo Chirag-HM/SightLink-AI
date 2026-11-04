@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>BMTC Smart Bus Tracker</title>
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .box {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 14px;
+            font-size: 17px;
+            border: 1px solid #aaa;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        button {
+            padding: 13px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+
+        #startBtn {
+            background: #28a745;
+            color: white;
+        }
+
+        #stopBtn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .route-item {
+            padding: 13px;
+            margin: 6px 0;
+            background: #eeeeee;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .route-item:hover {
+            background: #dddddd;
+        }
+
+        .selected {
+            background: #d4edda;
+            border: 2px solid #28a745;
+        }
+
+        #routesList {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        #gps {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        #nearestBus {
+            margin-top: 20px;
+            padding: 20px;
+            background: #eef6ff;
+            border-radius: 10px;
+        }
+
+        .bus-card {
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .bus-number {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .distance {
+            font-size: 18px;
+            margin-top: 5px;
+        }
+
+        .approaching {
+            font-weight: bold;
+        }
+
+        #allBuses {
+            margin-top: 20px;
+        }
+
+        .error {
+            color: #b00020;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<h1>🚌 BMTC Smart Bus Tracker</h1>
+
+
+<!-- ========================================= -->
+<!-- ROUTE SELECTION -->
+<!-- ========================================= -->
+
+<div class="box">
+
+    <h2>1. Select BMTC Route</h2>
+
+    <input
+        type="text"
+        id="routeSearch"
+        placeholder="Search route e.g. 401-A, 305, 500-D"
+    >
+
+    <div id="routesList">
+        Loading routes...
+    </div>
+
+    <p>
+        Selected Route:
+        <strong id="selectedRoute">None</strong>
+    </p>
+
+</div>
+
+
+<!-- ========================================= -->
+<!-- TRACKING -->
+<!-- ========================================= -->
+
+<div class="box">
+
+    <h2>2. Track Bus</h2>
+
+    <button
+        id="startBtn"
+        onclick="startTracking()">
+
+        ▶ Start Tracking
+
+    </button>
+
+
+    <button
+        id="stopBtn"
+        onclick="stopTracking()">
+
+        ■ Stop
+
+    </button>
+
+
+    <div id="status">
+
+        Waiting to start...
+
+    </div>
+
+
+    <div id="gps">
+
+        📍 GPS: Not available
+
+    </div>
+
+
+    <!-- ===================================== -->
+    <!-- NEAREST BUS -->
+    <!-- ===================================== -->
+
+    <div id="nearestBus">
+
+        <h2>🚍 Nearest Bus</h2>
+
+        <p>
+            No bus information yet.
+        </p>
+
+    </div>
+
+
+    <!-- ===================================== -->
+    <!-- ALL BUSES -->
+    <!-- ===================================== -->
+
+    <div id="allBuses">
+
+        <h2>🚌 Other Live Buses</h2>
+
+        <p>
+            No buses found yet.
+        </p>
+
+    </div>
+
+</div>
+
+
+<script>
+
+
+// =====================================================
+// GLOBAL VARIABLES
+// =====================================================
+
+let allRoutes = [];
+
+let selectedRoute = "";
+
+let tracking = false;
+
+let trackingInterval = null;
+
+let userLatitude = null;
+
+let userLongitude = null;
+
+
+// =====================================================
+// LOAD ALL ROUTES
+// =====================================================
+
+async function loadRoutes() {
+
+    try {
+
+        const response =
+            await fetch("/routes");
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.success) {
+
+            throw new Error(
+                "Route loading failed"
+            );
+
+        }
+
+
+        allRoutes =
+            data.routes || [];
+
+
+        document.getElementById(
+            "routesList"
+        ).innerHTML =
+            "🔎 Type a route number above.";
+
+
+        console.log(
+            "Loaded routes:",
+            allRoutes.length
+        );
+
+
+    } catch (error) {
+
+        console.error(error);
+
+
+        document.getElementById(
+            "routesList"
+        ).innerHTML =
+            "❌ Failed to load BMTC routes.";
+
+    }
+
+}
+
+
+// =====================================================
+// SEARCH ROUTES
+// =====================================================
+
+document.getElementById(
+    "routeSearch"
+).addEventListener(
+    "input",
+    function () {
+
+
+        const text =
+            this.value
+                .trim()
+                .toLowerCase();
+
+
+        const list =
+            document.getElementById(
+                "routesList"
+            );
+
+
+        if (!text) {
+
+            list.innerHTML =
+                "🔎 Type a route number above.";
+
+            return;
+
+        }
+
+
+        const matches =
+            allRoutes
+                .filter(route =>
+
+                    String(
+                        route.routeno || ""
+                    )
+                    .toLowerCase()
+                    .includes(text)
+
+                )
+                .slice(0, 30);
+
+
+        if (matches.length === 0) {
+
+            list.innerHTML =
+                "❌ No matching routes.";
+
+            return;
+
+        }
+
+
+        list.innerHTML = "";
+
+
+        matches.forEach(route => {
+
+
+            const item =
+                document.createElement(
+                    "div"
+                );
+
+
+            item.className =
+                "route-item";
+
+
+            item.innerHTML = `
+
+                <strong>
+                    ${route.routeno}
+                </strong>
+
+                <br>
+
+                ${route.fromstation || ""}
+                →
+                ${route.tostation || ""}
+
+            `;
+
+
+            item.onclick =
+                function () {
+
+                    selectRoute(
+                        route.routeno
+                    );
+
+                };
+
+
+            list.appendChild(item);
+
+        });
+
+    }
+);
+
+
+// =====================================================
+// SELECT ROUTE
+// =====================================================
+
+function selectRoute(routeNumber) {
+
+
+    selectedRoute =
+        routeNumber
+            .replace(
+                /\s+(UP|DOWN)$/i,
+                ""
+            )
+            .trim();
+
+
+    document.getElementById(
+        "routeSearch"
+    ).value =
+        routeNumber;
+
+
+    document.getElementById(
+        "selectedRoute"
+    ).textContent =
+        routeNumber;
+
+
+    document.getElementById(
+        "routesList"
+    ).innerHTML = `
+
+        ✅ Selected route:
+        <strong>${routeNumber}</strong>
+
+        <br>
+
+        🔎 Searching live buses for:
+        <strong>${selectedRoute}</strong>
+
+    `;
+
+
+}
+
+
+// =====================================================
+// GET GPS
+// =====================================================
+
+function getLocation() {
+
+
+    if (!navigator.geolocation) {
+
+        document.getElementById(
+            "status"
+        ).textContent =
+            "❌ GPS is not supported.";
+
+        return;
+
+    }
+
+
+    navigator.geolocation.getCurrentPosition(
+
+        function(position) {
+
+
+            userLatitude =
+                position.coords.latitude;
+
+
+            userLongitude =
+                position.coords.longitude;
+
+
+            document.getElementById(
+                "gps"
+            ).textContent =
+
+                `📍 GPS:
+                ${userLatitude.toFixed(6)},
+                ${userLongitude.toFixed(6)}`;
+
+
+        },
+
+
+        function(error) {
+
+            console.error(error);
+
+
+            document.getElementById(
+                "status"
+            ).textContent =
+                "❌ Could not get GPS location.";
+
+        },
+
+
+        {
+
+            enableHighAccuracy: true,
+
+            timeout: 10000,
+
+            maximumAge: 5000
+
+        }
+
+    );
+
+}
+
+
+// =====================================================
+// FIND NEARBY BUS
+// =====================================================
+
+async function findNearbyBus() {
+
+
+    if (!selectedRoute) {
+
+        return;
+
+    }
+
+
+    if (
+        userLatitude === null ||
+        userLongitude === null
+    ) {
+
+        return;
+
+    }
+
+
+    try {
+
+
+        const url =
+
+            `/nearby-bus/${encodeURIComponent(
+                selectedRoute
+            )}` +
+
+            `?latitude=${userLatitude}` +
+
+            `&longitude=${userLongitude}`;
+
+
+        console.log(
+            "Request:",
+            url
+        );
+
+
+        const response =
+            await fetch(url);
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "BMTC result:",
+            data
+        );
+
+
+        if (!response.ok) {
+
+            showError(
+                data.detail ||
+                "Backend error"
+            );
+
+            return;
+
+        }
+
+
+        if (!data.success) {
+
+            document.getElementById(
+                "nearestBus"
+            ).innerHTML = `
+
+                <h2>🚍 Nearest Bus</h2>
+
+                <p>
+                    ${data.message ||
+                    "No live buses found."}
+                </p>
+
+            `;
+
+
+            document.getElementById(
+                "allBuses"
+            ).innerHTML = `
+
+                <h2>🚌 Other Live Buses</h2>
+
+                <p>
+                    No buses available.
+                </p>
+
+            `;
+
+
+            return;
+
+        }
+
+
+        // =====================================
+        // SHOW NEAREST BUS
+        // =====================================
+
+        const nearest =
+            data.nearest_bus;
+
+
+        let distanceText;
+
+
+        if (
+            nearest.distance_km < 1
+        ) {
+
+            distanceText =
+                Math.round(
+                    nearest.distance_km * 1000
+                ) +
+                " meters";
+
+        } else {
+
+            distanceText =
+                nearest.distance_km.toFixed(1)
+                +
+                " km";
+
+        }
+
+
+        let movement;
+
+
+        if (
+            nearest.approaching === true
+        ) {
+
+            movement =
+                "🟢 Approaching you";
+
+        } else {
+
+            movement =
+                "🔵 Moving away from you";
+
+        }
+
+
+        document.getElementById(
+            "nearestBus"
+        ).innerHTML = `
+
+            <h2>🚍 Nearest Bus</h2>
+
+            <div class="bus-card">
+
+                <div class="bus-number">
+
+                    🚌 ${nearest.bus_number}
+
+                </div>
+
+                <div>
+
+                    Route:
+                    <strong>
+                        ${nearest.route}
+                    </strong>
+
+                </div>
+
+                <div class="distance">
+
+                    📏 ${distanceText}
+
+                </div>
+
+                <div class="approaching">
+
+                    ${movement}
+
+                </div>
+
+                <div>
+
+                    🧭 Heading:
+                    ${nearest.heading}°
+
+                </div>
+
+                <div>
+
+                    🕐 Last update:
+                    ${nearest.last_refresh ||
+                    "Unknown"}
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        // =====================================
+        // SHOW ALL BUSES
+        // =====================================
+
+        const buses =
+            data.all_buses || [];
+
+
+        let html = `
+
+            <h2>🚌 Live Buses
+                (${buses.length})
+            </h2>
+
+        `;
+
+
+        buses.forEach(
+            function(bus, index) {
+
+
+                let dist;
+
+
+                if (
+                    bus.distance_km < 1
+                ) {
+
+                    dist =
+                        Math.round(
+                            bus.distance_km * 1000
+                        ) +
+                        " m";
+
+                } else {
+
+                    dist =
+                        bus.distance_km.toFixed(1)
+                        +
+                        " km";
+
+                }
+
+
+                const status =
+                    bus.approaching
+                    ? "🟢 Approaching"
+                    : "🔵 Moving away";
+
+
+                html += `
+
+                    <div class="bus-card">
+
+                        <div class="bus-number">
+
+                            ${index + 1}.
+                            🚌 ${bus.bus_number}
+
+                        </div>
+
+                        <div>
+
+                            Route:
+                            ${bus.route}
+
+                        </div>
+
+                        <div>
+
+                            📏 ${dist}
+
+                        </div>
+
+                        <div>
+
+                            ${status}
+
+                        </div>
+
+                    </div>
+
+                `;
+
+            }
+        );
+
+
+        document.getElementById(
+            "allBuses"
+        ).innerHTML =
+            html;
+
+
+        // =====================================
+        // SPEAK
+        // =====================================
+
+        speak(
+            data.message
+        );
+
+
+        document.getElementById(
+            "status"
+        ).textContent =
+
+            `🚌 Tracking route:
+            ${selectedRoute}`;
+
+    } catch (error) {
+
+
+        console.error(error);
+
+
+        document.getElementById(
+            "nearestBus"
+        ).innerHTML = `
+
+            <h2>🚍 Nearest Bus</h2>
+
+            <p class="error">
+
+                ❌ Could not connect to backend.
+
+            </p>
+
+        `;
+
+    }
+
+}
+
+
+// =====================================================
+// START TRACKING
+// =====================================================
+
+function startTracking() {
+
+
+    if (!selectedRoute) {
+
+        alert(
+            "Please select a route first."
+        );
+
+        return;
+
+    }
+
+
+    tracking = true;
+
+
+    document.getElementById(
+        "status"
+    ).textContent =
+
+        `🚌 Starting tracking for:
+        ${selectedRoute}`;
+
+
+    getLocation();
+
+
+    // First search
+
+    setTimeout(
+        function () {
+
+            if (tracking) {
+
+                findNearbyBus();
+
+            }
+
+        },
+        3000
+    );
+
+
+    // Repeat every 20 seconds
+
+    trackingInterval =
+        setInterval(
+            function () {
+
+
+                if (!tracking) {
+
+                    return;
+
+                }
+
+
+                getLocation();
+
+
+                setTimeout(
+                    function () {
+
+                        if (tracking) {
+
+                            findNearbyBus();
+
+                        }
+
+                    },
+                    2000
+                );
+
+
+            },
+            20000
+        );
+
+}
+
+
+// =====================================================
+// STOP TRACKING
+// =====================================================
+
+function stopTracking() {
+
+
+    tracking = false;
+
+
+    if (trackingInterval) {
+
+        clearInterval(
+            trackingInterval
+        );
+
+        trackingInterval = null;
+
+    }
+
+
+    document.getElementById(
+        "status"
+    ).textContent =
+        "⏹ Tracking stopped.";
+
+}
+
+
+// =====================================================
+// TEXT TO SPEECH
+// =====================================================
+
+function speak(message) {
+
+
+    if (
+        !("speechSynthesis" in window)
+    ) {
+
+        return;
+
+    }
+
+
+    window.speechSynthesis.cancel();
+
+
+    const speech =
+        new SpeechSynthesisUtterance(
+            message
+        );
+
+
+    speech.rate = 0.9;
+
+    speech.volume = 1.0;
+
+
+    window.speechSynthesis.speak(
+        speech
+    );
+
+}
+
+
+// =====================================================
+// ERROR
+// =====================================================
+
+function showError(message) {
+
+    document.getElementById(
+        "nearestBus"
+    ).innerHTML = `
+
+        <h2>🚍 Nearest Bus</h2>
+
+        <p class="error">
+
+            ❌ ${message}
+
+        </p>
+
+    `;
+
+}
+
+
+// =====================================================
+// INITIALIZE
+// =====================================================
+
+loadRoutes();
+
+
+</script>
+
+
+</body>
+
+</html>

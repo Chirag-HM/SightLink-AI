@@ -1,0 +1,25 @@
+# Python environments and bytecode
+venv/
+.venv/
+.envvenv/
+__pycache__/
+*.py[cod]
+
+# Local tooling and generated build output
+.pio/
+.cache/
+.vscode/
+node_modules/
+dist/
+compile_commands.json
+__MACOSX/
+._*
+
+# Local credentials and certificates
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
