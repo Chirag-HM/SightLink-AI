@@ -1,0 +1,74 @@
+{
+  "demo_cities": ["bengaluru", "bangalore", "demo", "default"],
+  "stops": [
+    {
+      "stop_id": "STOP_CENTRAL",
+      "name": "Central Stop",
+      "latitude": 12.9778,
+      "longitude": 77.5713,
+      "landmark": "Main Transit Hub"
+    },
+    {
+      "stop_id": "STOP_GANDHI",
+      "name": "Gandhi Road Junction",
+      "latitude": 12.9756,
+      "longitude": 77.6066,
+      "landmark": "Metro Concourse"
+    },
+    {
+      "stop_id": "STOP_HOSPITAL",
+      "name": "City Hospital Gate",
+      "latitude": 12.9634,
+      "longitude": 77.5736,
+      "landmark": "Victoria Road"
+    }
+  ],
+  "routes": {
+    "400": {
+      "route_number": "400",
+      "stop_id": "STOP_CENTRAL",
+      "stop_name": "Central Stop",
+      "direction": "Airport",
+      "eta_minutes": 6,
+      "next_arrivals_minutes": [6, 18, 32],
+      "vehicle_id": "DEMO-400-1",
+      "bus_number": "KA-01-F-4001",
+      "latitude": 12.9735,
+      "longitude": 77.5762,
+      "heading": 35,
+      "approaching": true,
+      "live": true
+    },
+    "500D": {
+      "route_number": "500D",
+      "stop_id": "STOP_GANDHI",
+      "stop_name": "Gandhi Road Junction",
+      "direction": "Hebbal Ring Road",
+      "eta_minutes": 4,
+      "next_arrivals_minutes": [4, 14, 25],
+      "vehicle_id": "DEMO-500D-1",
+      "bus_number": "KA-57-F-5004",
+      "latitude": 12.9721,
+      "longitude": 77.6032,
+      "heading": 15,
+      "approaching": true,
+      "live": true
+    },
+    "335E": {
+      "route_number": "335E",
+      "stop_id": "STOP_CENTRAL",
+      "stop_name": "Central Stop",
+      "direction": "Kadugodi / ITPL",
+      "eta_minutes": 9,
+      "next_arrivals_minutes": [9, 21, 35],
+      "vehicle_id": "DEMO-335E-1",
+      "bus_number": "KA-01-FA-3352",
+      "latitude": 12.9710,
+      "longitude": 77.5890,
+      "heading": 88,
+      "approaching": true,
+      "live": true
+    }
+  }
+}
+

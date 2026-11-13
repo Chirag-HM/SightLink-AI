@@ -2,10 +2,10 @@
 // Replace with real API data when hardware/backend is connected
 
 export const mockDetections = [
-  { id: 1, label: 'PERSON', confidence: 98, position: 'Ahead', distance: '2.4m', color: '#00d4ff', x: 15, y: 10, w: 25, h: 55 },
-  { id: 2, label: 'CHAIR', confidence: 94, position: 'Left', distance: '1.8m', color: '#8b5cf6', x: 55, y: 35, w: 18, h: 30 },
-  { id: 3, label: 'LAPTOP', confidence: 91, position: 'Right', distance: '3.1m', color: '#3b82f6', x: 60, y: 45, w: 15, h: 12 },
-  { id: 4, label: 'BOTTLE', confidence: 87, position: 'Ahead-Right', distance: '2.0m', color: '#a855f7', x: 42, y: 50, w: 6, h: 16 },
+  { id: 1, label: 'PERSON', confidence: 98, position: 'Ahead', distance: '2.4m', color: '#059669', x: 15, y: 10, w: 25, h: 55 },
+  { id: 2, label: 'CHAIR', confidence: 94, position: 'Left', distance: '1.8m', color: '#9A7227', x: 55, y: 35, w: 18, h: 30 },
+  { id: 3, label: 'LAPTOP', confidence: 91, position: 'Right', distance: '3.1m', color: '#0F766E', x: 60, y: 45, w: 15, h: 12 },
+  { id: 4, label: 'BOTTLE', confidence: 87, position: 'Ahead-Right', distance: '2.0m', color: '#8C6A23', x: 42, y: 50, w: 6, h: 16 },
 ];
 
 export const mockBuses = [
@@ -66,14 +66,14 @@ export const mockDashboard = {
 };
 
 export const objectCategories = [
-  { name: 'Person', confidence: 98, position: 'Ahead · 2.4m', icon: 'User', color: '#00d4ff' },
-  { name: 'Vehicle', confidence: 95, position: 'Left · 4.1m', icon: 'Car', color: '#3b82f6' },
-  { name: 'Chair', confidence: 94, position: 'Right · 1.8m', icon: 'Armchair', color: '#8b5cf6' },
-  { name: 'Table', confidence: 92, position: 'Ahead · 3.0m', icon: 'Table2', color: '#a855f7' },
-  { name: 'Bottle', confidence: 87, position: 'Ahead-Right · 2.0m', icon: 'Wine', color: '#6366f1' },
-  { name: 'Laptop', confidence: 91, position: 'Right · 3.1m', icon: 'Laptop', color: '#00d4ff' },
-  { name: 'Door', confidence: 89, position: 'Ahead · 5.2m', icon: 'DoorOpen', color: '#3b82f6' },
-  { name: 'Traffic Signal', confidence: 97, position: 'Ahead · 8.4m', icon: 'TrafficCone', color: '#f59e0b' },
+  { name: 'Person', confidence: 98, position: 'Ahead · 2.4m', icon: 'User', color: '#065F46' },
+  { name: 'Vehicle', confidence: 95, position: 'Left · 4.1m', icon: 'Car', color: '#9A7227' },
+  { name: 'Chair', confidence: 94, position: 'Right · 1.8m', icon: 'Armchair', color: '#047857' },
+  { name: 'Table', confidence: 92, position: 'Ahead · 3.0m', icon: 'Table2', color: '#8C6A23' },
+  { name: 'Bottle', confidence: 87, position: 'Ahead-Right · 2.0m', icon: 'Wine', color: '#0F766E' },
+  { name: 'Laptop', confidence: 91, position: 'Right · 3.1m', icon: 'Laptop', color: '#065F46' },
+  { name: 'Door', confidence: 89, position: 'Ahead · 5.2m', icon: 'DoorOpen', color: '#9A7227' },
+  { name: 'Traffic Signal', confidence: 97, position: 'Ahead · 8.4m', icon: 'TrafficCone', color: '#047857' },
 ];
 
 export const systemArchitecture = {

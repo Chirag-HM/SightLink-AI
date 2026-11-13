@@ -19,6 +19,7 @@ Controls (press in the OpenCV window):
 """
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -38,7 +39,7 @@ except ImportError:
     sys.exit(1)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
-DEFAULT_IP           = "10.235.17.135"
+DEFAULT_IP           = "10.206.152.135"
 YOLO_MODEL           = "yolov8n.pt"      # nano = fastest (~6 MB)
 CONFIDENCE_THRESHOLD = 0.45
 COOLDOWN_SECONDS     = 5.0               # seconds between same announcement
@@ -81,12 +82,13 @@ class VoiceEngine:
             self.engine.setProperty("rate", 165)
             self.engine.setProperty("volume", 1.0)
 
-            print("[Voice] Windows TTS initialized")
+            print("[Voice] Windows TTS (pyttsx3) initialized")
             print(f"[Voice] {'ON' if self.enabled else 'OFF'}")
 
-        except Exception as e:
-            print("[Voice] TTS initialization failed:", e)
-            self.enabled = False
+        except Exception:
+            # Fall back to Windows PowerShell System.Speech SAPI synthesizer in _speak_now
+            print("[Voice] Windows TTS (System.Speech SAPI) initialized")
+            print(f"[Voice] {'ON' if self.enabled else 'OFF'}")
             self.engine = None
 
     def toggle(self):
@@ -214,14 +216,61 @@ def make_status_frame(msg, sub=""):
     return f
 
 
+def publish_detections_async(backend_url: str, detections: list[dict]):
+    if not backend_url:
+        return
+
+    def _send():
+        try:
+            payload = json.dumps({
+                "detector": "yolov8n",
+                "detections": detections,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{backend_url.rstrip('/')}/api/vision/detections",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=1.5):
+                pass
+        except Exception:
+            pass
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def try_discover_ip_from_backend(backend_url: str) -> str | None:
+    if not backend_url:
+        return None
+    try:
+        req = urllib.request.Request(
+            f"{backend_url.rstrip('/')}/api/vision/discover?scan_lan=true",
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if data.get("found") and data.get("camera_url"):
+            from urllib.parse import urlparse
+            parsed = urlparse(data["camera_url"])
+            return parsed.netloc
+    except Exception:
+        pass
+    return None
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="AI Blind Stick — Object Detection")
     parser.add_argument("--ip", default=DEFAULT_IP,
-                        help="ESP32-CAM IP address (default: 10.235.17.135)")
+                        help=f"ESP32-CAM IP address (default: {DEFAULT_IP})")
+    parser.add_argument("--backend", default="http://127.0.0.1:8000",
+                        help="SightLink backend URL to stream YOLO detections")
     parser.add_argument("--model", default=YOLO_MODEL)
     parser.add_argument("--conf", type=float, default=CONFIDENCE_THRESHOLD)
     parser.add_argument("--no-voice", action="store_true")
+    parser.add_argument("--no-window", action="store_true",
+                        help="Run headlessly without opening an OpenCV window")
     args = parser.parse_args()
 
     # ── Load YOLO ──────────────────────────────────────────────────────────
@@ -237,11 +286,13 @@ def main():
     voice = VoiceEngine(enabled=not args.no_voice)
     camera = CameraClient(args.ip)
 
-    cv2.namedWindow("AI Blind Stick", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("AI Blind Stick", DISPLAY_WIDTH, int(DISPLAY_WIDTH * 0.75))
+    if not args.no_window:
+        cv2.namedWindow("AI Blind Stick", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("AI Blind Stick", DISPLAY_WIDTH, int(DISPLAY_WIDTH * 0.75))
 
     print(f"\n[App] Camera URL: http://{args.ip}/capture")
     print(f"[App] Browser View: http://{args.ip}/")
+    print(f"[App] Backend API: {args.backend}/api/vision/detections")
     print(f"[App] Controls: [Q] Quit  [V] Voice  [S] Help  [R] Reconnect\n")
 
     voice.say("AI Blind Stick started")
@@ -253,26 +304,38 @@ def main():
     last_dets = 0
     connected = False
     consecutive_fails = 0
+    last_publish_at = 0.0
 
     while True:
         # ── Connect / reconnect ────────────────────────────────────────────
         if not connected:
-            cv2.imshow("AI Blind Stick",
-                       make_status_frame("Connecting to ESP32-CAM...",
-                                         f"Target: http://{args.ip}/capture"))
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
-                break
+            if not args.no_window:
+                cv2.imshow("AI Blind Stick",
+                           make_status_frame("Connecting to ESP32-CAM...",
+                                             f"Target: http://{args.ip}/capture"))
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("q"):
+                    break
 
             connected = camera.check()
             if not connected:
+                discovered_host = try_discover_ip_from_backend(args.backend)
+                if discovered_host:
+                    args.ip = discovered_host
+                    camera = CameraClient(discovered_host)
+                    connected = camera.check()
+
+            if not connected:
                 print(f"[App] Retrying connection in {RETRY_DELAY}s ...")
-                cv2.imshow("AI Blind Stick",
-                           make_status_frame("Connection failed — retrying...",
-                                             f"Cannot reach {args.ip} on Wi-Fi"))
-                key = cv2.waitKey(int(RETRY_DELAY * 1000)) & 0xFF
-                if key == ord("q"):
-                    break
+                if not args.no_window:
+                    cv2.imshow("AI Blind Stick",
+                               make_status_frame("Connection failed — retrying...",
+                                                 f"Cannot reach {args.ip} on Wi-Fi"))
+                    key = cv2.waitKey(int(RETRY_DELAY * 1000)) & 0xFF
+                    if key == ord("q"):
+                        break
+                else:
+                    time.sleep(RETRY_DELAY)
                 continue
 
             consecutive_fails = 0
@@ -304,14 +367,16 @@ def main():
         # ── Run YOLO ───────────────────────────────────────────────────────
         det_count = 0
         announced = set()
+        web_detections = []
+        fh, fw = frame.shape[:2]
         try:
             results = model(
-    frame,
-    conf=args.conf,
-    imgsz=640,
-    verbose=False
-)[0]
-            for box in results.boxes:
+                frame,
+                conf=args.conf,
+                imgsz=640,
+                verbose=False
+            )[0]
+            for idx, box in enumerate(results.boxes):
                 cls_id = int(box.cls[0])
                 conf = float(box.conf[0])
                 label = class_names.get(cls_id, str(cls_id))
@@ -321,6 +386,20 @@ def main():
                 draw_box(frame, x1, y1, x2, y2, label, conf, colour)
                 det_count += 1
 
+                cx = ((x1 + x2) / 2.0) / max(fw, 1)
+                pos = "Left" if cx < 0.35 else ("Right" if cx > 0.65 else "Ahead")
+                web_detections.append({
+                    "id": f"det-{idx}",
+                    "label": label,
+                    "confidence": round(conf * 100),
+                    "x": round((x1 / max(fw, 1)) * 100, 1),
+                    "y": round((y1 / max(fh, 1)) * 100, 1),
+                    "w": round(((x2 - x1) / max(fw, 1)) * 100, 1),
+                    "h": round(((y2 - y1) / max(fh, 1)) * 100, 1),
+                    "position": pos,
+                    "color": "#065F46",
+                })
+
                 if (label in ANNOUNCED_CLASSES
                         and label not in announced
                         and voice.can_announce(label)):
@@ -329,26 +408,32 @@ def main():
                     print(f"[Det] {label:18s} {conf:.0%}")
 
             last_dets = det_count
+            now_t = time.time()
+            if now_t - last_publish_at >= 0.4:
+                last_publish_at = now_t
+                publish_detections_async(args.backend, web_detections)
         except Exception as e:
             print(f"[YOLO] Detection error: {e}")
 
         # ── Display ────────────────────────────────────────────────────────
-        draw_hud(frame, fps, voice.enabled, last_dets, show_help)
-        cv2.imshow("AI Blind Stick", frame)
+        if not args.no_window:
+            draw_hud(frame, fps, voice.enabled, last_dets, show_help)
+            cv2.imshow("AI Blind Stick", frame)
 
-        # ── Key handler ────────────────────────────────────────────────────
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
-            break
-        elif key == ord("v"):
-            voice.toggle()
-        elif key == ord("s"):
-            show_help = not show_help
-        elif key == ord("r"):
-            print("[App] Manual reconnect requested...")
-            connected = False
+            # ── Key handler ────────────────────────────────────────────────
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
+            elif key == ord("v"):
+                voice.toggle()
+            elif key == ord("s"):
+                show_help = not show_help
+            elif key == ord("r"):
+                print("[App] Manual reconnect requested...")
+                connected = False
 
-    cv2.destroyAllWindows()
+    if not args.no_window:
+        cv2.destroyAllWindows()
     print("[App] Finished.")
 
 

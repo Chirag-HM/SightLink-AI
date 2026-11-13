@@ -1,12 +1,14 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266WebServer.h>
 #include <SoftwareSerial.h>
 #include <TinyGPSPlus.h>
 
 // ================= WIFI =================
-const char* WIFI_SSID = "realme GT 7 417E";
-const char* WIFI_PASSWORD = "Varun@2005";
+ESP8266WiFiMulti wifiMulti;
+const char* WIFI_SSID = "CHIRUUU";
+const char* WIFI_PASSWORD = "87654321";
 
 // ================= GPS =================
 #define GPS_RX D3
@@ -84,22 +86,22 @@ void addGPSHeaders() {
 
   server.sendHeader(
       "Access-Control-Allow-Origin",
-      DASHBOARD_ORIGIN
+      "*"
   );
 
   server.sendHeader(
       "Access-Control-Allow-Methods",
-      "GET, OPTIONS"
+      "GET, POST, OPTIONS"
   );
 
   server.sendHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type"
+      "Content-Type, Authorization, X-Requested-With"
   );
 
   server.sendHeader(
       "Cache-Control",
-      "no-store"
+      "no-store, no-cache, must-revalidate"
   );
 }
 
@@ -159,47 +161,68 @@ void setup() {
 
   // ================= WIFI =================
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.mode(WIFI_STA);
+  Serial.print("Connecting to WiFi (CHIRUUU)");
 
-  Serial.print("Connecting to WiFi");
+  WiFi.begin("CHIRUUU", "87654321");
 
-  while (WiFi.status() != WL_CONNECTED) {
-
+  int wifiAttempts = 0;
+  while (WiFi.status() != WL_CONNECTED && wifiAttempts < 30) {
     delay(500);
-
     Serial.print(".");
+    wifiAttempts++;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nRetrying with realme GT 7 417E...");
+    WiFi.begin("realme GT 7 417E", "Varun@2005");
+    wifiAttempts = 0;
+    while (WiFi.status() != WL_CONNECTED && wifiAttempts < 30) {
+      delay(500);
+      Serial.print(".");
+      wifiAttempts++;
+    }
   }
 
   Serial.println();
 
-  Serial.println("WiFi Connected!");
-
-  Serial.print("ESP8266 IP Address: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi Connected!");
+    Serial.print("SSID: ");
+    Serial.println(WiFi.SSID());
+    Serial.print("ESP8266 IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("WiFi Connection Failed. Starting SoftAP fallback...");
+    WiFi.softAP("SmartStick-Setup", "12345678");
+    Serial.print("SoftAP IP: ");
+    Serial.println(WiFi.softAPIP());
+  }
 
   // ================= WEB ROUTES =================
 
   server.on("/", handleRoot);
+  server.on("/", HTTP_OPTIONS, handleGPSOptions);
 
   // GPS
   server.on("/gps", handleGPS);
-  server.on(
-      "/gps",
-      HTTP_OPTIONS,
-      handleGPSOptions
-  );
+  server.on("/gps", HTTP_OPTIONS, handleGPSOptions);
 
   // Bus button
   server.on("/button", handleButton);
+  server.on("/button", HTTP_OPTIONS, handleGPSOptions);
 
   // AI button
   server.on("/ai-button", handleAIButton);
+  server.on("/ai-button", HTTP_OPTIONS, handleGPSOptions);
 
   // SOS button
   server.on("/sos-button", handleSOSButton);
+  server.on("/sos-button", HTTP_OPTIONS, handleGPSOptions);
 
   // Status
   server.on("/status", handleStatus);
+  server.on("/status", HTTP_OPTIONS, handleGPSOptions);
 
   server.begin();
 
@@ -436,6 +459,9 @@ void displayGPS() {
 
   Serial.println(" cm");
 
+  Serial.print("WiFi IP: ");
+  Serial.println(WiFi.localIP());
+
   Serial.println("------------------------------");
 }
 
@@ -445,6 +471,8 @@ void displayGPS() {
 // =================================================
 
 void handleRoot() {
+
+  addGPSHeaders();
 
   String message;
 
@@ -614,6 +642,8 @@ void handleGPSOptions() {
 
 void handleButton() {
 
+  addGPSHeaders();
+
   String json = "{";
 
   json += "\"pressed\":";
@@ -643,6 +673,8 @@ void handleButton() {
 
 void handleAIButton() {
 
+  addGPSHeaders();
+
   String json = "{";
 
   json += "\"pressed\":";
@@ -671,6 +703,8 @@ void handleAIButton() {
 // =================================================
 
 void handleSOSButton() {
+
+  addGPSHeaders();
 
   String json = "{";
 
@@ -734,6 +768,8 @@ void handleSOSButton() {
 // =================================================
 
 void handleStatus() {
+
+  addGPSHeaders();
 
   String json = "{";
 

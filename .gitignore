@@ -23,3 +23,28 @@ __MACOSX/
 *.key
 *.p12
 *.pfx
+
+# SQLite databases & temp files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Large model weights & binaries
+*.pt
+*.onnx
+*.tflite
+*.weights
+*.bin
+
+# Archive and driver packages
+*.zip
+*.tar.gz
+*.rar
+CP210x_Driver/
+CP210x/
+
+# Scratch & test outputs
+scratch/
+

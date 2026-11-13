@@ -95,7 +95,7 @@ export default function AIVisionSection() {
                   >
                     <div
                       className="label"
-                      style={{ backgroundColor: det.color, color: '#060612' }}
+                      style={{ backgroundColor: det.color, color: '#0b1233' }}
                     >
                       {det.label} {det.confidence}%
                     </div>

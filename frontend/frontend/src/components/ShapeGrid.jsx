@@ -253,13 +253,13 @@ const PRESET_CONFIGS = {
     shape: 'hexagon',
     direction: 'up',
     speed: 0.35,
-    lineColor: '#1c1b29',
-    hoverColor: '#2dd4bf',
-    hoverFillColor: '#2dd4bf',
-    fillOpacity: 0.15,
+    lineColor: 'rgba(6, 95, 70, 0.08)',
+    hoverColor: '#065F46',
+    hoverFillColor: '#C59B42',
+    fillOpacity: 0.12,
     radius: 2,
     trail: 0.9,
-    glow: 0.35,
+    glow: 0.25,
     cellSize: 40,
     lineWidth: 1,
   },
@@ -267,13 +267,13 @@ const PRESET_CONFIGS = {
     shape: 'square',
     direction: 'diagonal',
     speed: 0.5,
-    lineColor: '#2a2734',
-    hoverColor: '#ffffff',
-    hoverFillColor: '#ffffff',
-    fillOpacity: 0.15,
+    lineColor: 'rgba(18, 35, 27, 0.07)',
+    hoverColor: '#047857',
+    hoverFillColor: '#C59B42',
+    fillOpacity: 0.12,
     radius: 1.5,
     trail: 0.6,
-    glow: 0.35,
+    glow: 0.25,
     cellSize: 40,
     lineWidth: 1,
   }
@@ -319,8 +319,8 @@ export default function ShapeGrid({
   const actualLineWidth = lineWidth ?? presetConf.lineWidth ?? 1;
   const actualDirection = direction ?? presetConf.direction ?? 'up';
   const actualSpeed = speed ?? presetConf.speed ?? 0.35;
-  const actualLineColor = lineColor ?? presetConf.lineColor ?? '#1c1b29';
-  const actualHoverColor = hoverColor ?? presetConf.hoverColor ?? '#2dd4bf';
+  const actualLineColor = lineColor ?? presetConf.lineColor ?? 'rgba(6, 95, 70, 0.08)';
+  const actualHoverColor = hoverColor ?? presetConf.hoverColor ?? '#065F46';
   const actualHoverFillColor = hoverFillColor ?? presetConf.hoverFillColor ?? actualHoverColor;
   const actualFillOpacity = fillOpacity ?? presetConf.fillOpacity ?? 0.15;
   const actualRadius = radius ?? presetConf.radius ?? 2;

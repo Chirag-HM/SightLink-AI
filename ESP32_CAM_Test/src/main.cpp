@@ -6,8 +6,8 @@
 #include <WiFi.h>
 
 // ── Wi-Fi credentials ────────────────────────────────────────────────────────
-const char *ssid = "realme GT 7 417E";
-const char *password = "Varun@2005";
+const char *ssid = "CHIRUUU";
+const char *password = "87654321";
 
 // ── AI Thinker ESP32-CAM pin mapping ────────────────────────────────────────
 #define PWDN_GPIO_NUM 32

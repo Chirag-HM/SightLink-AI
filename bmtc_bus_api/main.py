@@ -56,19 +56,10 @@ VEHICLE_CACHE = {}
 
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.5",
     "Content-Type": "application/json",
     "lan": "en",
-    "deviceType": "WEB",
-
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-
-    "Origin": "https://bmtcwebportal.amnex.com",
-    "Referer": "https://bmtcwebportal.amnex.com/"
+    "deviceType": "ANDROID",
+    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; Build/TP1A.220624.014)",
 }
 
 
@@ -203,19 +194,12 @@ def find_route_parent(route_number: str):
     if not routes:
         return None
 
-    # Prefer exact route
+    clean_target = str(route_number).upper().replace("-", "").replace(" ", "").strip()
+    # Prefer exact or normalized route match (e.g. 335E matches 335-E)
     for route in routes:
-
-        if str(
-            route.get(
-                "routeno",
-                ""
-            )
-        ).upper() == route_number.upper():
-
-            return route.get(
-                "routeparentid"
-            )
+        routeno = str(route.get("routeno", "")).upper()
+        if routeno == route_number.upper() or routeno.replace("-", "").replace(" ", "") == clean_target:
+            return route.get("routeparentid")
 
     return routes[0].get(
         "routeparentid"
