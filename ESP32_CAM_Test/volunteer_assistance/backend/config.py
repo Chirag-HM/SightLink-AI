@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # Google Sign-In & Session Cookie Security
-    GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_CLIENT_ID", None)
+    GOOGLE_CLIENT_ID: str | None = (
+        (os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_CLIENT_ID") or "").strip().strip("'\"").strip() or None
+    )
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes")
     COOKIE_DOMAIN: str | None = os.getenv("COOKIE_DOMAIN") or None
     APP_PUBLIC_URL: str = os.getenv("APP_PUBLIC_URL", "http://localhost:5173").rstrip("/")

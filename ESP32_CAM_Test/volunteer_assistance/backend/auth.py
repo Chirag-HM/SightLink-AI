@@ -148,7 +148,7 @@ def verify_google_id_token(id_token: str) -> dict:
         payload = _google_verifier_override(id_token)
     else:
         payload = None
-        client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
+        client_id = (settings.GOOGLE_CLIENT_ID or "").strip().strip("'\"").strip()
         if not client_id:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
