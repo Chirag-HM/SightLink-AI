@@ -48,3 +48,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Start FastAPI application with automatic dynamic port binding
 CMD ["sh", "-c", "uvicorn ESP32_CAM_Test.volunteer_assistance.backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
