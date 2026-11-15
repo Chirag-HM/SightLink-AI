@@ -20,6 +20,12 @@ services:
         value: "true"
       - key: APP_PUBLIC_URL
         value: https://sightlink-ai.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
 
 databases:
   - name: sightlink-db

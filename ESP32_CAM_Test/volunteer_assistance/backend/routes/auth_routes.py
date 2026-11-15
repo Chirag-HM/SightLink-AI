@@ -412,6 +412,17 @@ async def _issue_and_send_email_otp(
     }
 
 
+@router.get("/config")
+def get_auth_public_config():
+    """Expose public authentication and integration configuration to the frontend at runtime."""
+    client_id = (settings.GOOGLE_CLIENT_ID or os.getenv("VITE_GOOGLE_CLIENT_ID") or "").strip()
+    return {
+        "google_client_id": client_id,
+        "gmail_configured": bool(gmail_sender.is_configured),
+        "app_public_url": settings.APP_PUBLIC_URL,
+    }
+
+
 @router.get("/csrf")
 def get_csrf_token(request: Request, response: Response):
     token = request.cookies.get("sightlink_csrf") or secrets.token_urlsafe(24)

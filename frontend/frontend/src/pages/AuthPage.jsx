@@ -22,7 +22,7 @@ import useVoiceAssistant, { speakText } from '../hooks/useVoiceAssistant';
 
 const AuthAmbientScene = lazy(() => import('../components/three/AuthAmbientScene'));
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const DEFAULT_GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 
 const ROLES = [
   {
@@ -83,7 +83,26 @@ export default function AuthPage({ initialMode = 'login' }) {
   const [error, setError] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
 
+  const [googleClientId, setGoogleClientId] = useState(DEFAULT_GOOGLE_CLIENT_ID);
   const googleBtnRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    authService.getConfig()
+      .then((cfg) => {
+        if (!active) return;
+        const cid = (cfg?.google_client_id || '').trim();
+        if (cid) {
+          setGoogleClientId(cid);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load auth runtime config:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setMode(initialMode);
@@ -152,14 +171,14 @@ export default function AuthPage({ initialMode = 'login' }) {
   }, [googleLogin, redirectAfterAuth]);
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || pendingRoleUser) return undefined;
+    if (!googleClientId || pendingRoleUser) return undefined;
     let cancelled = false;
 
     const renderButton = () => {
       if (cancelled || !window.google?.accounts?.id || !googleBtnRef.current) return;
       try {
         window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: googleClientId,
           callback: handleGoogleCredential,
         });
         googleBtnRef.current.innerHTML = '';
@@ -170,8 +189,8 @@ export default function AuthPage({ initialMode = 'login' }) {
           width: 340,
           text: 'continue_with',
         });
-      } catch {
-        // Ignore GIS initialization issue in unsupported environments
+      } catch (err) {
+        console.warn('Google Identity button initialization:', err);
       }
     };
 
@@ -203,7 +222,7 @@ export default function AuthPage({ initialMode = 'login' }) {
       cancelled = true;
       script.onload = null;
     };
-  }, [pendingRoleUser, handleGoogleCredential]);
+  }, [googleClientId, pendingRoleUser, handleGoogleCredential]);
 
   const handleSaveSelectedRole = async (e) => {
     e.preventDefault();
@@ -544,9 +563,35 @@ export default function AuthPage({ initialMode = 'login' }) {
 
               {/* Continue with Google */}
               <div className="mb-6">
-                {GOOGLE_CLIENT_ID ? (
+                {googleClientId ? (
                   <div className="flex flex-col items-center gap-2">
-                    <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center" />
+                    <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center w-full">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.google?.accounts?.id) {
+                            try {
+                              window.google.accounts.id.initialize({
+                                client_id: googleClientId,
+                                callback: handleGoogleCredential,
+                              });
+                              window.google.accounts.id.prompt();
+                            } catch (err) {
+                              console.warn('Google prompt error:', err);
+                            }
+                          }
+                        }}
+                        className="w-full min-h-[48px] px-4 py-2.5 rounded-full bg-white border border-[#DCD2BF] hover:border-[#065F46]/45 text-[#12231B] font-semibold text-sm flex items-center justify-center gap-3 shadow-sm transition-all focus-visible-ring"
+                      >
+                        <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z" />
+                          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z" />
+                          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.91 6.72-4.91z" />
+                        </svg>
+                        <span>Continue with Google</span>
+                      </button>
+                    </div>
                     <span className="text-[11px] font-mono text-[#55685E]">
                       Verified Google accounts skip email OTP codes automatically
                     </span>
@@ -556,7 +601,7 @@ export default function AuthPage({ initialMode = 'login' }) {
                     type="button"
                     onClick={() =>
                       setStatusMsg(
-                        'Google Sign-In is ready once VITE_GOOGLE_CLIENT_ID & GOOGLE_CLIENT_ID are configured in .env.'
+                        'Google Sign-In is ready once GOOGLE_CLIENT_ID is added in Render Environment Variables or .env.'
                       )
                     }
                     className="w-full min-h-[48px] px-4 py-2.5 rounded-full bg-white border border-[#DCD2BF] hover:border-[#065F46]/45 text-[#12231B] font-semibold text-sm flex items-center justify-center gap-3 shadow-sm transition-all focus-visible-ring"

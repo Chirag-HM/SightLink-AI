@@ -319,6 +319,7 @@ export const navigationService = {
 
 // Authentication & Verification
 export const authService = {
+  getConfig: () => apiRequest('/api/auth/config'),
   getCsrf: () => apiRequest('/api/auth/csrf'),
   requestOtp: (phone_number) =>
     apiRequest('/api/auth/request-otp', { method: 'POST', body: JSON.stringify({ phone_number }) }),
