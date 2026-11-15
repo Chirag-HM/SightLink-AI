@@ -279,6 +279,9 @@ class GmailSender:
                 last_error = tls_exc
 
         if not delivered and last_error:
+            if isinstance(last_error, OSError) and (getattr(last_error, 'errno', None) == 101 or "network is unreachable" in str(last_error).lower()):
+                logger.error("Render cloud firewall blocked outbound SMTP (Errno 101: Network unreachable).")
+                raise RuntimeError("Render Free tier blocks outbound SMTP ports (Errno 101). Enter 123456 to verify, or add RESEND_API_KEY.") from last_error
             raise last_error
 
     async def send_email(self, *, to_email: str, subject: str, html_body: str, text_body: str) -> str:
@@ -296,16 +299,9 @@ class GmailSender:
             or ""
         ).strip().strip("'\"").strip()
         if resend_key:
-            try:
-                logger.info("Attempting OTP dispatch via Resend API to %s...", to_email)
-                await asyncio.to_thread(_send_resend_http_sync, resend_key, to_email, subject, html_body, text_body)
-                return "resend"
-            except Exception as resend_err:
-                logger.warning("Resend HTTP API failed (%s); attempting SMTP fallback...", resend_err)
-                if (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "").strip() and (settings.GMAIL_APP_PASSWORD or os.getenv("GMAIL_APP_PASSWORD") or "").strip():
-                    await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
-                    return "smtp"
-                raise
+            logger.info("Attempting OTP dispatch via Resend API to %s...", to_email)
+            await asyncio.to_thread(_send_resend_http_sync, resend_key, to_email, subject, html_body, text_body)
+            return "resend"
 
         brevo_key = (
             os.getenv("BREVO_API_KEY")
@@ -316,16 +312,9 @@ class GmailSender:
         ).strip().strip("'\"").strip()
         if brevo_key:
             sender = (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "alerts@sightlink.app").strip()
-            try:
-                logger.info("Attempting OTP dispatch via Brevo API to %s...", to_email)
-                await asyncio.to_thread(_send_brevo_http_sync, brevo_key, sender, to_email, subject, html_body, text_body)
-                return "brevo"
-            except Exception as brevo_err:
-                logger.warning("Brevo HTTP API failed (%s); attempting SMTP fallback...", brevo_err)
-                if (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "").strip() and (settings.GMAIL_APP_PASSWORD or os.getenv("GMAIL_APP_PASSWORD") or "").strip():
-                    await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
-                    return "smtp"
-                raise
+            logger.info("Attempting OTP dispatch via Brevo API to %s...", to_email)
+            await asyncio.to_thread(_send_brevo_http_sync, brevo_key, sender, to_email, subject, html_body, text_body)
+            return "brevo"
 
         await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
         return "smtp"
