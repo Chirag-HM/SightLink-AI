@@ -382,6 +382,13 @@ async def _issue_and_send_email_otp(
         enforce_cooldown=enforce_cooldown,
     )
 
+    # Immediately release the DB connection back to the pool before slow network I/O
+    try:
+        db.commit()
+        db.close()
+    except Exception:
+        pass
+
     delivery = "unconfigured"
     if gmail_sender.is_configured or gmail_sender._transport_override is not None:
         try:

@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import settings
@@ -6,11 +7,25 @@ _db_url = settings.DATABASE_URL
 if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(
-    _db_url,
-    connect_args={"check_same_thread": False, "timeout": 30} if _db_url.startswith("sqlite") else {},
-    pool_pre_ping=True,
-)
+_is_sqlite = _db_url.startswith("sqlite")
+
+_engine_kwargs = {
+    "pool_pre_ping": True,
+}
+
+if _is_sqlite:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
+else:
+    # Production pool configuration for cloud deployments (Render / PostgreSQL)
+    # Prevents QueuePool limit exhaustion (default was pool_size=5, overflow=10)
+    _engine_kwargs.update({
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "20")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+        "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "300")),
+        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "15")),
+    })
+
+engine = create_engine(_db_url, **_engine_kwargs)
 
 if _db_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")

@@ -166,7 +166,7 @@ class GmailSender:
             server.send_message(msg)
 
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=4.0) as server:
                 server.ehlo()
                 server.starttls()
                 _deliver(server)
@@ -174,7 +174,7 @@ class GmailSender:
             raise
         except (OSError, smtplib.SMTPException) as primary_exc:
             logger.warning("Gmail STARTTLS (587) failed (%s); retrying SSL on port 465.", primary_exc)
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as ssl_server:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=4.0) as ssl_server:
                 _deliver(ssl_server)
 
     async def send_email(self, *, to_email: str, subject: str, html_body: str, text_body: str) -> str:
