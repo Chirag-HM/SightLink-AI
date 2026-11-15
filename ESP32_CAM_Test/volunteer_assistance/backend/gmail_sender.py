@@ -214,35 +214,38 @@ class GmailSender:
         msg.set_content(text_body)
         msg.add_alternative(html_body, subtype="html")
 
-        def _deliver(server):
-            server.ehlo()
-            server.login(gmail_user, gmail_pass)
-            server.send_message(msg)
-
         delivered = False
         last_error = None
 
+        # Attempt 1: Port 465 direct SSL (most reliable on cloud networks and Render)
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
-                server.ehlo()
-                server.starttls()
-                _deliver(server)
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as ssl_server:
+                ssl_server.login(gmail_user, gmail_pass)
+                ssl_server.send_message(msg)
                 delivered = True
+                logger.info("Successfully delivered email via Gmail SSL port 465 to %s", to_email)
         except smtplib.SMTPAuthenticationError as auth_err:
             logger.error("Gmail SMTP auth failed: 535 Username and Password not accepted. Check 2-Step Verification and App Password.")
             raise
-        except Exception as exc:
-            logger.warning("Gmail STARTTLS (587) failed (%s); trying port 465 SSL...", exc)
-            last_error = exc
+        except Exception as ssl_exc:
+            logger.warning("Gmail port 465 SSL failed (%s); trying port 587 STARTTLS...", ssl_exc)
+            last_error = ssl_exc
 
+        # Attempt 2: Port 587 with STARTTLS
         if not delivered:
             try:
-                with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as ssl_server:
-                    _deliver(ssl_server)
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.login(gmail_user, gmail_pass)
+                    server.send_message(msg)
                     delivered = True
-            except Exception as ssl_exc:
-                logger.error("Gmail SSL (465) failed (%s). Note: Render Free Tier blocks outbound SMTP ports 25, 465, 587.", ssl_exc)
-                last_error = ssl_exc
+                    logger.info("Successfully delivered email via Gmail STARTTLS port 587 to %s", to_email)
+            except smtplib.SMTPAuthenticationError:
+                raise
+            except Exception as tls_exc:
+                logger.error("Gmail port 587 also failed (%s)", tls_exc)
+                last_error = tls_exc
 
         if not delivered and last_error:
             raise last_error

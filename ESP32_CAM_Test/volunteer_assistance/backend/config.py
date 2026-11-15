@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     APP_PUBLIC_URL: str = os.getenv("APP_PUBLIC_URL", "http://localhost:5173").rstrip("/")
 
     # Gmail SMTP Sending (App Password) & Verification Policy
-    GMAIL_USER: str | None = os.getenv("GMAIL_USER", None)
-    GMAIL_APP_PASSWORD: str | None = os.getenv("GMAIL_APP_PASSWORD", None)
+    GMAIL_USER: str | None = (os.getenv("GMAIL_USER") or "").strip().strip("'\"").strip() or None
+    GMAIL_APP_PASSWORD: str | None = (os.getenv("GMAIL_APP_PASSWORD") or "").strip().strip("'\"").strip() or None
     GMAIL_FROM_NAME: str = os.getenv("GMAIL_FROM_NAME", "SightLink AI")
     EMAIL_OTP_EXPIRE_MINUTES: int = int(os.getenv("EMAIL_OTP_EXPIRE_MINUTES", "10"))
     EMAIL_OTP_MAX_ATTEMPTS: int = int(os.getenv("EMAIL_OTP_MAX_ATTEMPTS", "5"))
