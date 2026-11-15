@@ -44,9 +44,8 @@ from .gmail_sender import gmail_sender
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("volunteer_assistance_app")
 
-
 def safe_run_migrations():
-    """Run database table creation with retries so startup never crashes on transient DB delays."""
+    """Run database table creation with retries on startup so transient DB delays don't crash uvicorn."""
     import time
     for attempt in range(1, 6):
         try:
@@ -58,6 +57,10 @@ def safe_run_migrations():
             logger.warning("Database schema init attempt %d failed (%s); retrying in 2s...", attempt, exc)
             time.sleep(2)
     logger.error("Database schema init encountered errors; continuing so web server remains reachable.")
+
+
+# Ensure database tables and non-destructive column migrations exist
+safe_run_migrations()
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -179,8 +182,6 @@ async def monitor_assistance_requests():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database tables asynchronously without blocking uvicorn startup
-    asyncio.create_task(asyncio.to_thread(safe_run_migrations))
     monitor_task = asyncio.create_task(monitor_assistance_requests())
     stick_task = asyncio.create_task(monitor_esp8266_stick())
     logger.info("Volunteer Assistance API started. Escalation & ESP8266 stick bridge active.")

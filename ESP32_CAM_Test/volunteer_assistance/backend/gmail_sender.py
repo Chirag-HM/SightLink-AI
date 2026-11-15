@@ -1,11 +1,9 @@
 import asyncio
 import logging
-import os
 import smtplib
 from email.message import EmailMessage
 from html import escape
 from typing import Awaitable, Callable, Optional
-import requests
 
 from .config import settings
 
@@ -135,106 +133,23 @@ def build_alert_email(
     return subject, html_body, text_body
 
 
-def _send_resend_http_sync(api_key: str, to_email: str, subject: str, html_body: str, text_body: str) -> None:
-    sender_name = settings.GMAIL_FROM_NAME or "SightLink AI"
-    from_address = os.getenv("RESEND_FROM_EMAIL") or f"{sender_name} <onboarding@resend.dev>"
-    resp = requests.post(
-        "https://api.resend.com/emails",
-        headers={
-            "Authorization": f"Bearer {api_key.strip()}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "from": from_address,
-            "to": [to_email.strip()],
-            "subject": subject,
-            "html": html_body,
-            "text": text_body,
-        },
-        timeout=12,
-    )
-    if not resp.ok:
-        logger.error("Resend HTTP API error (%s): %s", resp.status_code, resp.text)
-        raise RuntimeError(f"Resend error ({resp.status_code}): {resp.text}")
-    logger.info("OTP verification email delivered via Resend HTTP to %s", to_email)
-
-
-def _send_brevo_http_sync(api_key: str, sender_email: str, to_email: str, subject: str, html_body: str, text_body: str) -> None:
-    sender_name = settings.GMAIL_FROM_NAME or "SightLink AI"
-    resp = requests.post(
-        "https://api.brevo.com/v3/smtp/email",
-        headers={
-            "api-key": api_key.strip(),
-            "Content-Type": "application/json",
-        },
-        json={
-            "sender": {"name": sender_name, "email": sender_email or "alerts@sightlink.app"},
-            "to": [{"email": to_email.strip()}],
-            "subject": subject,
-            "htmlContent": html_body,
-            "textContent": text_body,
-        },
-        timeout=12,
-    )
-    if not resp.ok:
-        logger.error("Brevo HTTP API error (%s): %s", resp.status_code, resp.text)
-        raise RuntimeError(f"Brevo error ({resp.status_code}): {resp.text}")
-    logger.info("OTP verification email delivered via Brevo HTTP to %s", to_email)
-
-
 class GmailSender:
     def __init__(self):
         self._transport_override: Optional[Callable[[str, str, str, str], Awaitable[None] | None]] = None
 
     @property
     def is_configured(self) -> bool:
-        resend_key = (
-            os.getenv("RESEND_API_KEY")
-            or os.getenv("RESEND")
-            or os.getenv("resend")
-            or os.getenv("RESEND_KEY")
-            or ""
-        ).strip().strip("'\"").strip()
-        brevo_key = (
-            os.getenv("BREVO_API_KEY")
-            or os.getenv("BREVO")
-            or os.getenv("brevo")
-            or os.getenv("BREVO_KEY")
-            or ""
-        ).strip().strip("'\"").strip()
-        gmail_user = (
-            settings.GMAIL_USER
-            or os.getenv("GMAIL_USER")
-            or os.getenv("gmail_user")
-            or ""
-        ).strip().strip("'\"").strip()
-        gmail_pass = "".join(
-            (
-                settings.GMAIL_APP_PASSWORD
-                or os.getenv("GMAIL_APP_PASSWORD")
-                or os.getenv("gmail_app_password")
-                or ""
-            ).strip().strip("'\"").split()
+        return bool(
+            (settings.GMAIL_USER or "").strip()
+            and "".join((settings.GMAIL_APP_PASSWORD or "").split())
         )
-        return bool(resend_key or brevo_key or (gmail_user and gmail_pass))
 
     def set_transport_override(self, fn: Optional[Callable[[str, str, str, str], Awaitable[None] | None]]) -> None:
         self._transport_override = fn
 
     def _send_smtp_sync(self, to_email: str, subject: str, html_body: str, text_body: str) -> None:
-        gmail_user = (
-            settings.GMAIL_USER
-            or os.getenv("GMAIL_USER")
-            or os.getenv("gmail_user")
-            or ""
-        ).strip().strip("'\"").strip()
-        raw_pass = (
-            settings.GMAIL_APP_PASSWORD
-            or os.getenv("GMAIL_APP_PASSWORD")
-            or os.getenv("gmail_app_password")
-            or ""
-        ).strip().strip("'\"").strip()
-        gmail_pass = "".join(raw_pass.split())
+        gmail_user = (settings.GMAIL_USER or "").strip()
+        gmail_pass = "".join((settings.GMAIL_APP_PASSWORD or "").split())
         if not gmail_user or not gmail_pass:
             raise RuntimeError("Gmail SMTP credentials (GMAIL_USER / GMAIL_APP_PASSWORD) are not configured.")
 
@@ -245,44 +160,22 @@ class GmailSender:
         msg.set_content(text_body)
         msg.add_alternative(html_body, subtype="html")
 
-        delivered = False
-        last_error = None
+        def _deliver(server):
+            server.ehlo()
+            server.login(gmail_user, gmail_pass)
+            server.send_message(msg)
 
-        # Attempt 1: Port 465 direct SSL (most reliable on cloud networks and Render)
         try:
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as ssl_server:
-                ssl_server.login(gmail_user, gmail_pass)
-                ssl_server.send_message(msg)
-                delivered = True
-                logger.info("Successfully delivered email via Gmail SSL port 465 to %s", to_email)
-        except smtplib.SMTPAuthenticationError as auth_err:
-            logger.error("Gmail SMTP auth failed: 535 Username and Password not accepted. Check 2-Step Verification and App Password.")
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+                server.ehlo()
+                server.starttls()
+                _deliver(server)
+        except smtplib.SMTPAuthenticationError:
             raise
-        except Exception as ssl_exc:
-            logger.warning("Gmail port 465 SSL failed (%s); trying port 587 STARTTLS...", ssl_exc)
-            last_error = ssl_exc
-
-        # Attempt 2: Port 587 with STARTTLS
-        if not delivered:
-            try:
-                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.login(gmail_user, gmail_pass)
-                    server.send_message(msg)
-                    delivered = True
-                    logger.info("Successfully delivered email via Gmail STARTTLS port 587 to %s", to_email)
-            except smtplib.SMTPAuthenticationError:
-                raise
-            except Exception as tls_exc:
-                logger.error("Gmail port 587 also failed (%s)", tls_exc)
-                last_error = tls_exc
-
-        if not delivered and last_error:
-            if isinstance(last_error, OSError) and (getattr(last_error, 'errno', None) == 101 or "network is unreachable" in str(last_error).lower()):
-                logger.error("Render cloud firewall blocked outbound SMTP (Errno 101: Network unreachable).")
-                raise RuntimeError("Render Free tier blocks outbound SMTP ports (Errno 101). Enter 123456 to verify, or add RESEND_API_KEY.") from last_error
-            raise last_error
+        except (OSError, smtplib.SMTPException) as primary_exc:
+            logger.warning("Gmail STARTTLS (587) failed (%s); retrying SSL on port 465.", primary_exc)
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as ssl_server:
+                _deliver(ssl_server)
 
     async def send_email(self, *, to_email: str, subject: str, html_body: str, text_body: str) -> str:
         if self._transport_override is not None:
@@ -290,31 +183,6 @@ class GmailSender:
             if asyncio.iscoroutine(res):
                 await res
             return "override"
-
-        resend_key = (
-            os.getenv("RESEND_API_KEY")
-            or os.getenv("RESEND")
-            or os.getenv("resend")
-            or os.getenv("RESEND_KEY")
-            or ""
-        ).strip().strip("'\"").strip()
-        if resend_key:
-            logger.info("Attempting OTP dispatch via Resend API to %s...", to_email)
-            await asyncio.to_thread(_send_resend_http_sync, resend_key, to_email, subject, html_body, text_body)
-            return "resend"
-
-        brevo_key = (
-            os.getenv("BREVO_API_KEY")
-            or os.getenv("BREVO")
-            or os.getenv("brevo")
-            or os.getenv("BREVO_KEY")
-            or ""
-        ).strip().strip("'\"").strip()
-        if brevo_key:
-            sender = (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "alerts@sightlink.app").strip()
-            logger.info("Attempting OTP dispatch via Brevo API to %s...", to_email)
-            await asyncio.to_thread(_send_brevo_http_sync, brevo_key, sender, to_email, subject, html_body, text_body)
-            return "brevo"
 
         await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
         return "smtp"
