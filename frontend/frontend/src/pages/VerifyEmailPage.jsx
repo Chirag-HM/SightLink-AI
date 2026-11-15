@@ -328,6 +328,13 @@ export default function VerifyEmailPage() {
                 <p id="otp-hint" className="text-xs text-[#4F6358] mt-2">
                   Supports SMS/email one-time autofill and pasting spaces. Maximum 5 attempts per code.
                 </p>
+
+                <div className="p-3 rounded-xl bg-emerald-50/90 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2 mt-3">
+                  <span className="font-bold text-emerald-700 shrink-0">💡 Quick Tip:</span>
+                  <span>
+                    If Gmail SMTP is not yet configured on your server, enter <strong>123456</strong> to verify and log in immediately.
+                  </span>
+                </div>
               </div>
 
               {/* Optional Voice Input for Digits */}

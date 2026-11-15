@@ -376,7 +376,12 @@ export default function BMTCPage() {
         }
       } catch (err) {
         console.error('Trip planner error:', err);
-        setTripError(err?.message || 'Failed to search bus routes between these stops.');
+        const rawMsg = err?.message || '';
+        const safeMsg =
+          rawMsg && !rawMsg.includes('<html') && !rawMsg.includes('<!DOCTYPE') && !rawMsg.includes('/@vite/client')
+            ? rawMsg
+            : 'Transit service is temporarily unavailable. Please retry.';
+        setTripError(safeMsg);
       } finally {
         setTripLoading(false);
       }
@@ -404,10 +409,20 @@ export default function BMTCPage() {
           const spoken = data.spoken_summary || `Route ${data.route_number} has ${data.total_stops} stops.`;
           speakText(spoken);
         } else {
-          setStopsError(data?.detail || 'Could not load stops for this route.');
+          const detailMsg = typeof data?.detail === 'string' ? data.detail : '';
+          setStopsError(
+            detailMsg && !detailMsg.includes('<html') && !detailMsg.includes('<!DOCTYPE')
+              ? detailMsg
+              : 'Could not load stops for this route.'
+          );
         }
       } catch (err) {
-        setStopsError(err?.message || 'Failed to load route stops sequence.');
+        const rawMsg = err?.message || '';
+        const safeMsg =
+          rawMsg && !rawMsg.includes('<html') && !rawMsg.includes('<!DOCTYPE') && !rawMsg.includes('/@vite/client')
+            ? rawMsg
+            : 'Could not connect to transit server. Please retry in a moment.';
+        setStopsError(safeMsg);
       } finally {
         setStopsLoading(false);
       }
