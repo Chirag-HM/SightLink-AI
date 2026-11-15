@@ -2,12 +2,17 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from .config import settings
 
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args={"check_same_thread": False, "timeout": 30} if settings.DATABASE_URL.startswith("sqlite") else {}
+    _db_url,
+    connect_args={"check_same_thread": False, "timeout": 30} if _db_url.startswith("sqlite") else {},
+    pool_pre_ping=True,
 )
 
-if settings.DATABASE_URL.startswith("sqlite"):
+if _db_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _configure_sqlite(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
@@ -31,7 +36,7 @@ def get_db():
 def run_migrations():
     """Safely add newly introduced columns onto existing SQLite tables without data loss."""
     Base.metadata.create_all(bind=engine)
-    if not settings.DATABASE_URL.startswith("sqlite"):
+    if not _db_url.startswith("sqlite"):
         return
 
     column_migrations = {

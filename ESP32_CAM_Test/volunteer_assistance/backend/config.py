@@ -128,9 +128,14 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def _fallback_database_url(cls, value):
-        if isinstance(value, str) and not value.strip():
+        if not value or (isinstance(value, str) and not value.strip()):
             return f"sqlite:///{_DEFAULT_DB_PATH}"
-        return value or f"sqlite:///{_DEFAULT_DB_PATH}"
+        if isinstance(value, str):
+            val = value.strip()
+            if val.startswith("postgres://"):
+                val = val.replace("postgres://", "postgresql://", 1)
+            return val
+        return value
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
