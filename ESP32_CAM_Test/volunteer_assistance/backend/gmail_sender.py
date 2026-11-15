@@ -188,21 +188,52 @@ class GmailSender:
 
     @property
     def is_configured(self) -> bool:
-        return bool(
-            (os.getenv("RESEND_API_KEY") or "").strip()
-            or (os.getenv("BREVO_API_KEY") or "").strip()
-            or (
-                (settings.GMAIL_USER or "").strip()
-                and "".join((settings.GMAIL_APP_PASSWORD or "").split())
-            )
+        resend_key = (
+            os.getenv("RESEND_API_KEY")
+            or os.getenv("RESEND")
+            or os.getenv("resend")
+            or os.getenv("RESEND_KEY")
+            or ""
+        ).strip().strip("'\"").strip()
+        brevo_key = (
+            os.getenv("BREVO_API_KEY")
+            or os.getenv("BREVO")
+            or os.getenv("brevo")
+            or os.getenv("BREVO_KEY")
+            or ""
+        ).strip().strip("'\"").strip()
+        gmail_user = (
+            settings.GMAIL_USER
+            or os.getenv("GMAIL_USER")
+            or os.getenv("gmail_user")
+            or ""
+        ).strip().strip("'\"").strip()
+        gmail_pass = "".join(
+            (
+                settings.GMAIL_APP_PASSWORD
+                or os.getenv("GMAIL_APP_PASSWORD")
+                or os.getenv("gmail_app_password")
+                or ""
+            ).strip().strip("'\"").split()
         )
+        return bool(resend_key or brevo_key or (gmail_user and gmail_pass))
 
     def set_transport_override(self, fn: Optional[Callable[[str, str, str, str], Awaitable[None] | None]]) -> None:
         self._transport_override = fn
 
     def _send_smtp_sync(self, to_email: str, subject: str, html_body: str, text_body: str) -> None:
-        gmail_user = (settings.GMAIL_USER or "").strip().strip("'\"").strip()
-        raw_pass = (settings.GMAIL_APP_PASSWORD or "").strip().strip("'\"").strip()
+        gmail_user = (
+            settings.GMAIL_USER
+            or os.getenv("GMAIL_USER")
+            or os.getenv("gmail_user")
+            or ""
+        ).strip().strip("'\"").strip()
+        raw_pass = (
+            settings.GMAIL_APP_PASSWORD
+            or os.getenv("GMAIL_APP_PASSWORD")
+            or os.getenv("gmail_app_password")
+            or ""
+        ).strip().strip("'\"").strip()
         gmail_pass = "".join(raw_pass.split())
         if not gmail_user or not gmail_pass:
             raise RuntimeError("Gmail SMTP credentials (GMAIL_USER / GMAIL_APP_PASSWORD) are not configured.")
@@ -257,16 +288,44 @@ class GmailSender:
                 await res
             return "override"
 
-        resend_key = (os.getenv("RESEND_API_KEY") or "").strip()
+        resend_key = (
+            os.getenv("RESEND_API_KEY")
+            or os.getenv("RESEND")
+            or os.getenv("resend")
+            or os.getenv("RESEND_KEY")
+            or ""
+        ).strip().strip("'\"").strip()
         if resend_key:
-            await asyncio.to_thread(_send_resend_http_sync, resend_key, to_email, subject, html_body, text_body)
-            return "resend"
+            try:
+                logger.info("Attempting OTP dispatch via Resend API to %s...", to_email)
+                await asyncio.to_thread(_send_resend_http_sync, resend_key, to_email, subject, html_body, text_body)
+                return "resend"
+            except Exception as resend_err:
+                logger.warning("Resend HTTP API failed (%s); attempting SMTP fallback...", resend_err)
+                if (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "").strip() and (settings.GMAIL_APP_PASSWORD or os.getenv("GMAIL_APP_PASSWORD") or "").strip():
+                    await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
+                    return "smtp"
+                raise
 
-        brevo_key = (os.getenv("BREVO_API_KEY") or "").strip()
+        brevo_key = (
+            os.getenv("BREVO_API_KEY")
+            or os.getenv("BREVO")
+            or os.getenv("brevo")
+            or os.getenv("BREVO_KEY")
+            or ""
+        ).strip().strip("'\"").strip()
         if brevo_key:
-            sender = (settings.GMAIL_USER or "alerts@sightlink.app").strip()
-            await asyncio.to_thread(_send_brevo_http_sync, brevo_key, sender, to_email, subject, html_body, text_body)
-            return "brevo"
+            sender = (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "alerts@sightlink.app").strip()
+            try:
+                logger.info("Attempting OTP dispatch via Brevo API to %s...", to_email)
+                await asyncio.to_thread(_send_brevo_http_sync, brevo_key, sender, to_email, subject, html_body, text_body)
+                return "brevo"
+            except Exception as brevo_err:
+                logger.warning("Brevo HTTP API failed (%s); attempting SMTP fallback...", brevo_err)
+                if (settings.GMAIL_USER or os.getenv("GMAIL_USER") or "").strip() and (settings.GMAIL_APP_PASSWORD or os.getenv("GMAIL_APP_PASSWORD") or "").strip():
+                    await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
+                    return "smtp"
+                raise
 
         await asyncio.to_thread(self._send_smtp_sync, to_email, subject, html_body, text_body)
         return "smtp"

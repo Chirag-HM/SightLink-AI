@@ -383,6 +383,7 @@ async def _issue_and_send_email_otp(
     )
 
     delivery = "unconfigured"
+    delivery_error = ""
     if gmail_sender.is_configured or gmail_sender._transport_override is not None:
         try:
             delivery = await gmail_sender.send_email(
@@ -392,21 +393,23 @@ async def _issue_and_send_email_otp(
                 text_body=text_body,
             )
         except Exception as exc:
-            logger.error("Failed to send verification email to %s: %s", clean_email, exc)
+            delivery_error = str(exc)
+            logger.error("Failed to send verification email to %s: %s", clean_email, delivery_error)
             if raise_on_smtp_error:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Unable to send verification email via Gmail SMTP. Check GMAIL_USER / GMAIL_APP_PASSWORD settings.",
+                    detail=f"Unable to send verification email: {delivery_error[:120]}",
                 )
             delivery = "smtp_error"
     else:
         logger.warning(
-            "Gmail SMTP unconfigured (set GMAIL_USER & GMAIL_APP_PASSWORD). Verification code generated for subject %s.",
-            subject_id,
+            "Email service unconfigured (set GMAIL_USER & GMAIL_APP_PASSWORD, or RESEND_API_KEY). Code generated for %s.",
+            clean_email,
         )
 
     return {
         "delivery": delivery,
+        "error": delivery_error,
         "expires_in_seconds": settings.EMAIL_OTP_EXPIRE_MINUTES * 60,
         "cooldown_seconds": settings.EMAIL_OTP_COOLDOWN_SECONDS,
     }
@@ -674,12 +677,18 @@ async def register(
             enforce_cooldown=False,
             raise_on_smtp_error=False,
         )
-        if send_res["delivery"] in ("smtp", "override"):
+        if send_res["delivery"] in ("smtp", "override", "resend", "brevo"):
             msg = f"6-digit verification code sent to {clean_email}. Complete verification to register your account."
         elif send_res["delivery"] == "smtp_error":
-            msg = "Verification code ready, but Gmail SMTP failed. Enter code 123456 to verify immediately."
+            err_msg = send_res.get("error") or ""
+            if "testing emails to your own email" in err_msg.lower():
+                msg = f"Resend free tier only sends to your admin account email. Enter 123456 to verify {clean_email}."
+            elif "535" in err_msg:
+                msg = "Gmail SMTP rejected login (535). Check App Password or enter 123456 to verify."
+            else:
+                msg = f"Email delivery error ({err_msg[:60] if err_msg else 'firewall block'}). Enter 123456 to verify."
         else:
-            msg = "Gmail SMTP is unconfigured. Enter code 123456 to verify immediately, or check server logs."
+            msg = "Email service unconfigured. Enter code 123456 to verify immediately, or check server logs."
 
         snap = SimpleNamespace(**prep)
         token = _issue_pending_session(response, snap)
@@ -971,11 +980,18 @@ async def send_email_verification_code(
         raise_on_smtp_error=False,
     )
     delivery = res.get("delivery")
-    msg = prep["response_template"].get("message")
-    if delivery == "unconfigured":
-        msg = "Gmail SMTP unconfigured on server. Enter code 123456 to verify immediately, or check server logs."
+    err_msg = res.get("error") or ""
+    if delivery in ("smtp", "override", "resend", "brevo"):
+        msg = f"6-digit verification code sent to {prep['target_email']}."
     elif delivery == "smtp_error":
-        msg = "Verification email could not be sent via Gmail SMTP. Enter code 123456 to verify immediately."
+        if "testing emails to your own email" in err_msg.lower():
+            msg = f"Resend free tier only delivers to your registered admin email. Enter code 123456 to verify."
+        elif "535" in err_msg:
+            msg = "Gmail SMTP rejected login (535). Check App Password or enter 123456 to verify."
+        else:
+            msg = f"Email dispatch failed ({err_msg[:60] if err_msg else 'firewall block'}). Enter code 123456 to verify."
+    else:
+        msg = "Email service unconfigured on server. Enter code 123456 to verify immediately, or check server logs."
 
     return {
         **prep["response_template"],
