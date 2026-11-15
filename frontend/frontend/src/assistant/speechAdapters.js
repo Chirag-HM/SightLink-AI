@@ -226,6 +226,7 @@ export function createBrowserSttController({
   let stream = null;
   let rafId = null;
   let silenceTimer = null;
+  let speechDebounceTimer = null;
   let stoppedManually = false;
   let gotFinalResult = false;
   let latestText = '';
@@ -235,6 +236,41 @@ export function createBrowserSttController({
       clearTimeout(silenceTimer);
       silenceTimer = null;
     }
+  };
+
+  const clearSpeechDebounceTimer = () => {
+    if (speechDebounceTimer) {
+      clearTimeout(speechDebounceTimer);
+      speechDebounceTimer = null;
+    }
+  };
+
+  const finalizeIfReady = () => {
+    clearSpeechDebounceTimer();
+    clearSilenceTimer();
+    if (gotFinalResult || stoppedManually) return;
+    const textOut = latestText.trim();
+    if (textOut) {
+      gotFinalResult = true;
+      stop();
+      onFinal?.(textOut);
+    }
+  };
+
+  const armSilenceTimer = () => {
+    clearSilenceTimer();
+    silenceTimer = setTimeout(() => {
+      if (gotFinalResult || stoppedManually) return;
+      if (latestText.trim()) {
+        gotFinalResult = true;
+        const textOut = latestText.trim();
+        stop();
+        onFinal?.(textOut);
+      } else {
+        stop();
+        onSilenceTimeout?.();
+      }
+    }, silenceTimeoutMs);
   };
 
   const stopMeter = () => {
@@ -283,22 +319,6 @@ export function createBrowserSttController({
     }
   };
 
-  const armSilenceTimer = () => {
-    clearSilenceTimer();
-    silenceTimer = setTimeout(() => {
-      if (gotFinalResult || stoppedManually) return;
-      if (latestText.trim()) {
-        gotFinalResult = true;
-        const textOut = latestText.trim();
-        stop();
-        onFinal?.(textOut);
-      } else {
-        stop();
-        onSilenceTimeout?.();
-      }
-    }, silenceTimeoutMs);
-  };
-
   const start = (overrideLang) => {
     if (!SpeechRec) {
       onError?.('unsupported', 'Web Speech Recognition is unavailable in this browser.');
@@ -308,6 +328,8 @@ export function createBrowserSttController({
     stoppedManually = false;
     gotFinalResult = false;
     latestText = '';
+    clearSilenceTimer();
+    clearSpeechDebounceTimer();
 
     try {
       recognition?.abort();
@@ -316,7 +338,7 @@ export function createBrowserSttController({
     }
 
     recognition = new SpeechRec();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 3;
     recognition.lang = overrideLang || lang;
@@ -328,33 +350,40 @@ export function createBrowserSttController({
     };
 
     recognition.onresult = (event) => {
-      let full = '';
-      let isFinal = false;
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        full += event.results[i][0].transcript;
-        if (event.results[i].isFinal) isFinal = true;
+      let accumulatedFinal = '';
+      let interim = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        const item = event.results[i];
+        if (item.isFinal) {
+          accumulatedFinal += item[0].transcript + ' ';
+        } else {
+          interim += item[0].transcript;
+        }
       }
-      const clean = full.trim();
+      const clean = (accumulatedFinal + interim).trim();
       if (clean) {
         latestText = clean;
         armSilenceTimer();
         onInterim?.(clean);
-      }
-      if (isFinal && clean && !gotFinalResult) {
-        gotFinalResult = true;
-        clearSilenceTimer();
-        onFinal?.(clean);
+
+        // Allow user to finish speaking full sentences without premature cutoff
+        clearSpeechDebounceTimer();
+        speechDebounceTimer = setTimeout(() => {
+          finalizeIfReady();
+        }, 1250);
       }
     };
 
     recognition.onerror = (ev) => {
       clearSilenceTimer();
+      clearSpeechDebounceTimer();
       if (stoppedManually || ev.error === 'aborted') return;
       onError?.(ev.error, ev.message || ev.error);
     };
 
     recognition.onend = () => {
       clearSilenceTimer();
+      clearSpeechDebounceTimer();
       stopMeter();
       if (!stoppedManually && !gotFinalResult && latestText.trim()) {
         gotFinalResult = true;
@@ -368,6 +397,7 @@ export function createBrowserSttController({
       return true;
     } catch (err) {
       clearSilenceTimer();
+      clearSpeechDebounceTimer();
       stopMeter();
       onError?.('start_failed', err?.message || 'Could not start speech recognition.');
       return false;
@@ -377,6 +407,7 @@ export function createBrowserSttController({
   const stop = ({ abort = false } = {}) => {
     stoppedManually = true;
     clearSilenceTimer();
+    clearSpeechDebounceTimer();
     try {
       if (abort) recognition?.abort();
       else recognition?.stop();

@@ -40,16 +40,22 @@ const char* DASHBOARD_ORIGIN = "http://localhost:5173";
 // ================= VARIABLES =================
 float distanceCM = 0;
 
-// Bus button
-bool lastBusButtonState = HIGH;
+// Button debounce state
+const unsigned long BUTTON_DEBOUNCE_DELAY_MS = 50;
+
+unsigned long lastBusDebounceTime = 0;
+int lastBusReading = HIGH;
+int currentBusButtonState = HIGH;
 bool busButtonEvent = false;
 
-// AI button
-bool lastAIButtonState = HIGH;
+unsigned long lastAIDebounceTime = 0;
+int lastAIReading = HIGH;
+int currentAIButtonState = HIGH;
 bool aiButtonEvent = false;
 
-// SOS button
-bool lastSOSButtonState = HIGH;
+unsigned long lastSOSDebounceTime = 0;
+int lastSOSReading = HIGH;
+int currentSOSButtonState = HIGH;
 bool sosButtonEvent = false;
 
 unsigned long lastSensorTime = 0;
@@ -242,8 +248,8 @@ void loop() {
   // ================= GPS =================
 
   while (GPS.available()) {
-
     gps.encode(GPS.read());
+    yield();
   }
 
   // ================= WEB SERVER =================
@@ -253,28 +259,25 @@ void loop() {
   // ================= ULTRASONIC =================
 
   if (millis() - lastSensorTime >= 100) {
-
     lastSensorTime = millis();
-
     readUltrasonic();
   }
 
   // ================= BUTTONS =================
 
   checkBusButton();
-
   checkAIButton();
-
   checkSOSButton();
 
   // ================= GPS DISPLAY =================
 
   if (millis() - lastGPSDisplay >= 2000) {
-
     lastGPSDisplay = millis();
-
     displayGPS();
   }
+
+  // Yield to ESP8266 background WiFi stack
+  delay(1);
 }
 
 
@@ -294,8 +297,9 @@ void readUltrasonic() {
 
   digitalWrite(TRIG_PIN, LOW);
 
+  // 18ms timeout covers up to ~300 cm (well beyond 150 cm obstacle trigger)
   unsigned long duration =
-      pulseIn(ECHO_PIN, HIGH, 25000);
+      pulseIn(ECHO_PIN, HIGH, 18000);
 
   if (duration == 0) {
 
@@ -327,26 +331,24 @@ void readUltrasonic() {
 // =================================================
 
 void checkBusButton() {
-
-  bool currentButtonState =
-      digitalRead(BUS_BUTTON_PIN);
-
-  // Detect HIGH -> LOW
-  if (lastBusButtonState == HIGH &&
-      currentButtonState == LOW) {
-
-    busButtonEvent = true;
-
-    Serial.println();
-    Serial.println("================================");
-    Serial.println("BUS ASSISTANT ACTIVATED");
-    Serial.println("Waiting for laptop voice command...");
-    Serial.println("Say a bus route such as 507");
-    Serial.println("================================");
+  int reading = digitalRead(BUS_BUTTON_PIN);
+  if (reading != lastBusReading) {
+    lastBusDebounceTime = millis();
   }
-
-  lastBusButtonState =
-      currentButtonState;
+  if ((millis() - lastBusDebounceTime) > BUTTON_DEBOUNCE_DELAY_MS) {
+    if (reading != currentBusButtonState) {
+      currentBusButtonState = reading;
+      // Active LOW: button pressed connects pin to GND
+      if (currentBusButtonState == LOW) {
+        busButtonEvent = true;
+        Serial.println();
+        Serial.println("================================");
+        Serial.println("BUS ASSISTANT ACTIVATED (D5)");
+        Serial.println("================================");
+      }
+    }
+  }
+  lastBusReading = reading;
 }
 
 
@@ -355,54 +357,50 @@ void checkBusButton() {
 // =================================================
 
 void checkAIButton() {
-
-  bool currentButtonState =
-      digitalRead(AI_BUTTON_PIN);
-
-  // Detect HIGH -> LOW
-  if (lastAIButtonState == HIGH &&
-      currentButtonState == LOW) {
-
-    aiButtonEvent = true;
-
-    Serial.println();
-    Serial.println("================================");
-    Serial.println("AI ASSISTANT ACTIVATED");
-    Serial.println("Waiting for voice command...");
-    Serial.println("================================");
+  int reading = digitalRead(AI_BUTTON_PIN);
+  if (reading != lastAIReading) {
+    lastAIDebounceTime = millis();
   }
-
-  lastAIButtonState =
-      currentButtonState;
+  if ((millis() - lastAIDebounceTime) > BUTTON_DEBOUNCE_DELAY_MS) {
+    if (reading != currentAIButtonState) {
+      currentAIButtonState = reading;
+      // Active LOW: button pressed connects pin to GND
+      if (currentAIButtonState == LOW) {
+        aiButtonEvent = true;
+        Serial.println();
+        Serial.println("================================");
+        Serial.println("AI ASSISTANT ACTIVATED (D6)");
+        Serial.println("================================");
+      }
+    }
+  }
+  lastAIReading = reading;
 }
 
 
 // =================================================
-// SOS BUTTON - D0
+// SOS BUTTON - D7
 // =================================================
 
 void checkSOSButton() {
-
-  bool currentButtonState = digitalRead(SOS_BUTTON_PIN);
-
-  // Button pressed
-  if (currentButtonState == LOW &&
-      lastSOSButtonState == HIGH) {
-
-    sosButtonEvent = true;
-
-    Serial.println();
-    Serial.println("================================");
-    Serial.println("!!! SOS BUTTON PRESSED !!!");
-    Serial.println("EMERGENCY MODE ACTIVATED");
-    Serial.println("Getting GPS location...");
-    Serial.println("================================");
-
-    // Debounce
-    delay(200);
+  int reading = digitalRead(SOS_BUTTON_PIN);
+  if (reading != lastSOSReading) {
+    lastSOSDebounceTime = millis();
   }
-
-  lastSOSButtonState = currentButtonState;
+  if ((millis() - lastSOSDebounceTime) > BUTTON_DEBOUNCE_DELAY_MS) {
+    if (reading != currentSOSButtonState) {
+      currentSOSButtonState = reading;
+      // Active LOW: button pressed connects pin to GND
+      if (currentSOSButtonState == LOW) {
+        sosButtonEvent = true;
+        Serial.println();
+        Serial.println("================================");
+        Serial.println("!!! SOS BUTTON PRESSED (D7) !!!");
+        Serial.println("================================");
+      }
+    }
+  }
+  lastSOSReading = reading;
 }
 
 
@@ -825,35 +823,30 @@ void handleStatus() {
 
   // Ultrasonic
   json += ",\"distance_cm\":";
-
   json += String(
       distanceCM,
       1
   );
 
+  // Read and consume button events atomically so subsequent polls don't double-trigger
+  bool busNow = busButtonEvent;
+  bool aiNow = aiButtonEvent;
+  bool sosNow = sosButtonEvent;
+  busButtonEvent = false;
+  aiButtonEvent = false;
+  sosButtonEvent = false;
+
   // Bus
   json += ",\"bus_button\":";
-
-  json +=
-      busButtonEvent
-          ? "true"
-          : "false";
+  json += busNow ? "true" : "false";
 
   // AI
   json += ",\"ai_button\":";
-
-  json +=
-      aiButtonEvent
-          ? "true"
-          : "false";
+  json += aiNow ? "true" : "false";
 
   // SOS
   json += ",\"sos_button\":";
-
-  json +=
-      sosButtonEvent
-          ? "true"
-          : "false";
+  json += sosNow ? "true" : "false";
 
   json += "}";
 

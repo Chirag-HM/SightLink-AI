@@ -167,6 +167,8 @@ export function AssistantProvider({ children }) {
   const sosTimerRef = useRef(null);
   const sttRef = useRef(null);
   const seenHwEventsRef = useRef(new Set());
+  const lastActionAtRef = useRef({});
+  const listeningStartedAtRef = useRef(0);
   const spokenApproachesRef = useRef(new Set());
   const lastRerouteAtRef = useRef(0);
   const lastObstacleHapticAtRef = useRef(0);
@@ -945,6 +947,9 @@ export function AssistantProvider({ children }) {
   // ── Unified Hardware & On-Screen Button State Machine ─────────────────────
   const handleButtonAction = useCallback(
     async (action = 'single_press', { source = 'button', eventId = null } = {}) => {
+      const now = Date.now();
+
+      // Deduplicate by explicit eventId
       if (eventId) {
         if (seenHwEventsRef.current.has(eventId)) return;
         seenHwEventsRef.current.add(eventId);
@@ -953,6 +958,13 @@ export function AssistantProvider({ children }) {
           seenHwEventsRef.current.delete(first);
         }
       }
+
+      // Action debounce cooldown: ignore duplicate identical action within 1000ms
+      const lastActionTime = lastActionAtRef.current[action] || 0;
+      if (now - lastActionTime < 1000) {
+        return;
+      }
+      lastActionAtRef.current[action] = now;
 
       if (action === 'long_press' || action === 'press_hold_sos') {
         stopListening({ abort: true });
@@ -984,6 +996,7 @@ export function AssistantProvider({ children }) {
         playAssistantCue('listen');
         triggerHaptic('listen');
         setInterimTranscript('');
+        listeningStartedAtRef.current = now;
         setAssistantState('Listening');
         const busPrompt =
           activeLang === 'kn-IN'
@@ -1057,6 +1070,11 @@ export function AssistantProvider({ children }) {
       }
 
       if (stateRef.current.micActive || stateRef.current.assistantState === 'Listening') {
+        const listeningStartedAt = listeningStartedAtRef.current || 0;
+        // Ignore rapid duplicate press or mechanical bounce within 1.5 seconds of entering listening
+        if (now - listeningStartedAt < 1500) {
+          return;
+        }
         stopListening({ abort: true });
         failureCountRef.current = 0;
         setAssistantState('Idle');
@@ -1074,6 +1092,7 @@ export function AssistantProvider({ children }) {
       }
 
       // Idle -> start listening
+      listeningStartedAtRef.current = now;
       failureCountRef.current = 0;
       playAssistantCue('listen');
       triggerHaptic('listen');
@@ -1112,17 +1131,18 @@ export function AssistantProvider({ children }) {
 
   const simulateHardwarePress = useCallback(
     async (action = 'single_press') => {
-      try {
-        await hardwareButtonService.triggerButtonEvent({
-          action,
-          device_id: 'web-simulator',
-          source: 'ui_simulator',
-          client_id: clientId,
-          user_id: stateRef.current.user?.id || null,
-        });
-      } catch {
-        // Offline or backend unavailable: trigger locally directly
-        handleButtonAction(action, { source: 'ui_simulator_local' });
+      // Trigger locally for zero latency feedback
+      handleButtonAction(action, { source: 'ui_simulator' });
+      if (stateRef.current.isOnline) {
+        hardwareButtonService
+          .triggerButtonEvent({
+            action,
+            device_id: 'web-simulator',
+            source: 'ui_simulator',
+            client_id: clientId,
+            user_id: stateRef.current.user?.id || null,
+          })
+          .catch(() => {});
       }
     },
     [clientId, handleButtonAction]

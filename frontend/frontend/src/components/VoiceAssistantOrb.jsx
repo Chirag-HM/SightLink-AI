@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Mic,
   Radio,
@@ -302,7 +303,7 @@ export default function VoiceAssistantOrb() {
                       className={`w-3 h-3 ${hardwareConnected ? 'text-[#065F46]' : 'text-[#697D72]'}`}
                       aria-hidden="true"
                     />
-                    {hardwareConnected ? 'ESP32 Button Connected' : 'WS Button Ready'}
+                    {hardwareConnected ? 'Hardware Button Connected' : 'Stick Button Ready'}
                   </span>
                 </div>
               </div>
@@ -376,11 +377,116 @@ export default function VoiceAssistantOrb() {
             )}
 
             {busResult && (
-              <div className="p-3 rounded-xl bg-[#FBF3DF] border border-[#C59B42]/40 text-xs text-[#12231B] flex items-start gap-2">
+              <div className="p-3 rounded-xl bg-[#FBF3DF] border border-[#C59B42]/40 text-xs text-[#12231B] flex items-start gap-2.5">
                 <Bus className="w-4 h-4 text-[#8C6A23] shrink-0 mt-0.5" aria-hidden="true" />
-                <div>
-                  <span className="font-bold block">Route {busResult.route_number}</span>
-                  <span>{busResult.spoken_summary}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="font-bold text-[#12231B] truncate">
+                      {busResult.type === 'stop_explorer_menu'
+                        ? 'BMTC Stop Explorer'
+                        : busResult.type === 'route_stops' || busResult.stops
+                        ? `Stop Explorer: Route ${busResult.route_number || ''}`
+                        : busResult.type === 'trip_planner_menu'
+                        ? 'BMTC Trip Planner'
+                        : busResult.source && busResult.destination
+                        ? `Trip: ${busResult.source} → ${busResult.destination}`
+                        : busResult.route_number
+                        ? `Route ${busResult.route_number}`
+                        : 'BMTC Transit'}
+                    </span>
+                    <Link
+                      to={
+                        busResult.type === 'trip_planner_menu'
+                          ? '/bmtc?tab=planner'
+                          : busResult.type === 'trip_plan'
+                          ? `/bmtc?tab=planner&source=${encodeURIComponent(busResult.source || '')}&destination=${encodeURIComponent(busResult.destination || '')}`
+                          : busResult.type === 'stop_explorer_menu'
+                          ? '/bmtc?tab=stops'
+                          : busResult.type === 'route_stops' || busResult.stops
+                          ? `/bmtc?tab=stops&route=${encodeURIComponent(busResult.route_number || '')}`
+                          : '/bmtc'
+                      }
+                      onClick={() => setDrawerOpen(false)}
+                      className="text-[10px] font-mono font-semibold text-[#065F46] hover:underline shrink-0"
+                    >
+                      {busResult.type?.includes('stop') ? 'Open Explorer →' : 'Open Planner →'}
+                    </Link>
+                  </div>
+                  <p className="text-xs text-[#354B40] leading-snug">
+                    {busResult.spoken_summary || busResult.message || 'Transit info loaded.'}
+                  </p>
+
+                  {/* Trip Planner Result Routes */}
+                  {Array.isArray(busResult.routes) && busResult.routes.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {busResult.routes.slice(0, 3).map((r, idx) => (
+                        <span
+                          key={`${r.route_number}-${idx}`}
+                          className="px-1.5 py-0.5 rounded bg-white/80 border border-[#C59B42]/30 text-[10px] font-mono font-semibold text-[#7D5B1C]"
+                        >
+                          Bus {r.route_number} ({r.stops_count} stops · {r.estimated_time_mins || 45}m · ₹{r.fare_ordinary_inr})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Stop Explorer Result Stops */}
+                  {Array.isArray(busResult.stops) && busResult.stops.length > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                        <span className="px-1.5 py-0.5 rounded bg-white/80 border border-[#065F46]/30 text-[#065F46] font-bold">
+                          {busResult.total_stops || busResult.stops.length} Stops
+                        </span>
+                        {busResult.fare_ordinary_inr != null && (
+                          <span className="px-1.5 py-0.5 rounded bg-white/80 border border-[#C59B42]/30 text-[#7D5B1C]">
+                            ₹{busResult.fare_ordinary_inr} Ordinary
+                          </span>
+                        )}
+                        {busResult.fare_vajra_ac_inr != null && (
+                          <span className="px-1.5 py-0.5 rounded bg-white/80 border border-[#065F46]/20 text-[#065F46]">
+                            ₹{busResult.fare_vajra_ac_inr} Vajra AC
+                          </span>
+                        )}
+                      </div>
+                      {busResult.nearest_user_stop && (
+                        <p className="text-[11px] text-[#065F46] font-medium">
+                          📍 Nearest stop to you: <strong>{busResult.nearest_user_stop.name}</strong> (~{busResult.nearest_user_stop.distance_m}m away)
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Trip Planner Quick Suggestions when opened via voice without parameters */}
+                  {busResult.type === 'trip_planner_menu' && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {['Hebbal to Silk Board', 'Majestic to Whitefield', 'KBS to Electronic City'].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => processTranscript(`bus from ${suggestion}`, { source: 'ui_quick' })}
+                          className="px-2 py-0.5 rounded-full bg-white/80 border border-[#C59B42]/40 text-[10px] font-semibold text-[#7D5B1C] hover:border-[#065F46]"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Stop Explorer Quick Suggestions when opened via voice without parameters */}
+                  {busResult.type === 'stop_explorer_menu' && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {['500D', '335E', '400', '401', '365'].map((route) => (
+                        <button
+                          key={route}
+                          type="button"
+                          onClick={() => processTranscript(`stops for route ${route}`, { source: 'ui_quick' })}
+                          className="px-2 py-0.5 rounded-full bg-white/80 border border-[#065F46]/40 text-[10px] font-semibold text-[#065F46] hover:bg-[#ECF7F2]"
+                        >
+                          Route {route} Stops
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -468,7 +574,7 @@ export default function VoiceAssistantOrb() {
             {/* Hardware Button Test Simulator */}
             <div className="p-2.5 rounded-xl bg-[#F6F1E6] border border-[#E2D9C8] space-y-1.5">
               <span className="text-[10px] font-mono uppercase tracking-wider text-[#4F6358] block">
-                Hardware Button Actions (ESP32 WS / Bench Test)
+                Hardware Button Actions (ESP8266 Stick / Bench Test)
               </span>
               <div className="grid grid-cols-3 gap-1.5">
                 <button

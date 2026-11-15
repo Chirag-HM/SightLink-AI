@@ -11,6 +11,7 @@ import {
   Navigation,
   Clock,
   Activity,
+  Heart,
   Wifi,
   ChevronRight,
   AlertTriangle,
@@ -39,6 +40,7 @@ import {
 
 const sidebarItems = [
   { icon: Activity, label: 'Overview', active: true },
+  { icon: Heart, label: 'Health Monitoring', href: '/health' },
   { icon: Volume2, label: 'Get Help Now', href: '/assist' },
   { icon: Eye, label: 'Eyes on Demand', href: '/live-assist' },
   { icon: Users, label: 'Volunteers', href: '/volunteers' },

@@ -17,6 +17,8 @@ export const INTENTS = {
   NAVIGATION: 'NAVIGATION',
   NEAREST_BUS_STOP: 'NEAREST_BUS_STOP',
   BUS_INFO: 'BUS_INFO',
+  BMTC_SOURCE_DESTINATION: 'BMTC_SOURCE_DESTINATION',
+  BMTC_ROUTE_STOPS: 'BMTC_ROUTE_STOPS',
   CALL_FAMILY: 'CALL_FAMILY',
   SEND_LOCATION: 'SEND_LOCATION',
   WHERE_AM_I: 'WHERE_AM_I',
@@ -126,6 +128,114 @@ export function extractBusRouteNumber(raw = '') {
   const generic = normalizeDigits(norm).match(/(?:^|\s)([a-z]-\d{2,4}[a-z]?|\d{1,4}[a-z]?)(?:\s|$|[?!.,।])/i);
   if (generic) return generic[1].toUpperCase();
   return null;
+}
+
+export function extractSourceDestination(raw = '') {
+  const norm = normalizeSpokenNumbersAll(raw).trim();
+  if (!norm) return null;
+
+  // 1. English patterns
+  const enPatterns = [
+    /\b(?:plan\s+(?:a\s+)?(?:trip|journey|commute)|trip\s+planner|trip)\s+(?:from|between)\s+([^,]+?)\s+(?:to|and)\s+([^,.?!]+)/i,
+    /\b(?:plan\s+(?:a\s+)?(?:trip|journey|commute)|trip\s+planner)\s+to\s+([^,.?!]+)/i,
+    /\b(?:bus(?:es)?|bmtc|route|public\s+transport)\s+(?:from|between)\s+([^,]+?)\s+(?:to|and)\s+([^,.?!]+)/i,
+    /\b(?:how\s+to\s+go|how\s+to\s+reach|how\s+to\s+get|can\s+i\s+go)\s+from\s+([^,]+?)\s+to\s+([^,.?!]+?)(?:\s+by\s+bus|\s+bmtc)?$/i,
+    /\bfrom\s+([^,]+?)\s+to\s+([^,.?!]+)/i,
+    /\b(?:which|what)\s+bus\s+(?:goes\s+)?from\s+([^,]+?)\s+to\s+([^,.?!]+)/i,
+    /\b(?:bus(?:es)?\s+between|connecting)\s+([^,]+?)\s+and\s+([^,.?!]+)/i,
+    /\b([^,]+?)\s+to\s+([^,.?!]+?)\s+(?:bus(?:es)?|trip)\b/i,
+    /\b(?:bus(?:es)?|bmtc|trip)\s+to\s+([^,.?!]+)/i,
+  ];
+
+  for (const pat of enPatterns) {
+    const m = norm.match(pat);
+    if (m && m[1] && m[2]) {
+      const src = m[1].replace(/^(?:the\s+)/i, '').trim();
+      const dst = m[2].replace(/^(?:the\s+)/i, '').replace(/\b(?:by\s+bus|bmtc|please|today|now)\b/gi, '').trim();
+      if (src && dst && src.toLowerCase() !== dst.toLowerCase()) {
+        return { source: src, destination: dst };
+      }
+    } else if (m && m[1] && !m[2]) {
+      const dst = m[1].replace(/^(?:the\s+)/i, '').replace(/\b(?:by\s+bus|bmtc|please|today|now)\b/gi, '').trim();
+      if (dst) {
+        return { source: null, destination: dst };
+      }
+    }
+  }
+
+  // 2. Kannada patterns: "<SOURCE> ನಿಂದ/ಇಂದ/ದಿಂದ <DEST> ಗೆ ಬಸ್"
+  const knPattern = /(.+?)\s*(?:ನಿಂದ|ಇಂದ|ದಿಂದ)\s+(.+?)(?:ಗೆ|ಕ್ಕೆ|ವರೆಗೆ|ತನಕ)\s*(?:ಯಾವ\s*)?(?:ಬಸ್|ಬಸ್ಸು|ರೂಟ್|ಪ್ರಯಾಣ|ಟ್ರಿಪ್)?/iu;
+  const knMatch = norm.match(knPattern);
+  if (knMatch && knMatch[1] && knMatch[2]) {
+    const src = knMatch[1].replace(/[\u200c\u200d]/g, '').trim();
+    const dst = knMatch[2].replace(/[\u200c\u200d]/g, '').trim();
+    if (src && dst) return { source: src, destination: dst };
+  }
+
+  // Kanglish: "<SOURCE> ninda/inda <DEST> ge bus"
+  const kanglishPattern = /\b([a-z0-9\s]+?)\s+(?:ninda|inda)\s+([a-z0-9\s]+?)\s+(?:ge|kke|varige)\s+(?:bus|buses|trip)?/i;
+  const kanglishMatch = norm.match(kanglishPattern);
+  if (kanglishMatch && kanglishMatch[1] && kanglishMatch[2]) {
+    return { source: kanglishMatch[1].trim(), destination: kanglishMatch[2].trim() };
+  }
+
+  // 3. Hindi: "<SOURCE> से <DEST> (तक)? बस/ट्रिप"
+  const hiPattern = /([^\s]+(?:\s+[^\s]+)?)\s+से\s+([^\s]+(?:\s+[^\s]+)?)\s*(?:तक)?\s*(?:बस|रूट|ट्रिप|यात्रा)/iu;
+  const hiMatch = norm.match(hiPattern);
+  if (hiMatch && hiMatch[1] && hiMatch[2]) {
+    return { source: hiMatch[1].trim(), destination: hiMatch[2].trim() };
+  }
+
+  // Hinglish: "<SOURCE> se <DEST> bus/trip"
+  const hinglishMatch = /\b([a-z0-9\s]+?)\s+se\s+([a-z0-9\s]+?)\s+(?:tak\s+)?(?:bus|trip)\b/i.exec(norm);
+  if (hinglishMatch && hinglishMatch[1] && hinglishMatch[2]) {
+    return { source: hinglishMatch[1].trim(), destination: hinglishMatch[2].trim() };
+  }
+
+  return null;
+}
+
+export function extractRouteStopsQuery(raw = '') {
+  const norm = normalizeSpokenNumbersAll(raw).toLowerCase().trim();
+  const isStopInquiry =
+    hasAnyPhrase(norm, [
+      'stop explorer', 'open stop explorer', 'explore stops', 'explore bus stops', 'explore route stops', 'stops explorer',
+      'stops', 'bus stops', 'all stops', 'stops list', 'list of stops', 'route stops', 'stop sequence', 'bus stop sequence',
+      'stops for', 'stops of', 'what are the stops', 'where does it stop', 'which stops',
+      'source to destination stops', 'intermediate stops', 'explore route',
+      'ನಿಲ್ದಾಣಗಳು', 'ಬಸ್ ನಿಲ್ದಾಣಗಳು', 'ಸ್ಟಾಪ್‌ಗಳು', 'ಸ್ಟಾಪ್ ಗಳು', 'ಯಾವ ನಿಲ್ದಾಣ',
+      'ಸ್ಟಾಪ್ ಲಿಸ್ಟ್', 'ನಿಲ್ದಾಣಗಳ ಪಟ್ಟಿ', 'ಸ್ಟಾಪ್ ಎಕ್ಸ್‌ಪ್ಲೋರರ್', 'ಸ್ಟಾಪ್ ಸೀಕ್ವೆನ್ಸ್',
+      'स्टॉप', 'स्टॉप्स', 'बस स्टॉप', 'कहाँ रुकती है', 'कहा रुकती है', 'स्टॉप लिस्ट', 'स्टॉप एक्सप्लोरर',
+      'நிறுத்தங்கள்', 'பஸ் நிறுத்தங்கள்', 'எங்கே நிற்கும்', 'ஸ்டாப் எக்ஸ்ப்ளோரர்',
+      'స్టాప్‌లు', 'బస్ స్టాప్‌లు', 'ఎక్కడ ఆగుతుంది', 'స్టాప్ ఎక్స్‌ప్లోరర్',
+      'stops yaavuvu', 'stops list', 'all stops', 'stop explorer',
+    ]) ||
+    norm.includes('stop explorer') ||
+    norm.includes('explore stops') ||
+    norm.includes('ಸ್ಟಾಪ್ ಎಕ್ಸ್‌ಪ್ಲೋರರ್') ||
+    norm.includes('स्टॉप एक्सप्लोरर') ||
+    norm.includes('stops') ||
+    norm.includes('ನಿಲ್ದಾಣ') ||
+    norm.includes('ಸ್ಟಾಪ್');
+
+  if (!isStopInquiry) return null;
+  let route = extractBusRouteNumber(raw);
+  if (!route) {
+    const standalone = norm.match(/(?:^|\s)(?:route\s+|bus\s+|for\s+|of\s+)?([a-z]?-?\d{1,4}[a-z]?)(?:\s|$|[?!.,])/i);
+    if (standalone && standalone[1] && /\d/.test(standalone[1])) {
+      route = standalone[1].toUpperCase();
+    }
+  }
+  if (route) return { routeNumber: route };
+
+  const isExplicitExplorer =
+    hasAnyPhrase(norm, [
+      'stop explorer', 'open stop explorer', 'explore stops', 'explore bus stops', 'stops explorer',
+      'ಸ್ಟಾಪ್ ಎಕ್ಸ್‌ಪ್ಲೋರರ್', 'ನಿಲ್ದಾಣಗಳ ಪಟ್ಟಿ', 'ಸ್ಟಾಪ್ ಸೀಕ್ವೆನ್ಸ್',
+      'स्टॉप एक्सप्लोरर', 'स्टॉप लिस्ट', 'बस स्टॉप एक्सप्लोरर',
+      'ஸ்டாப் எக்ஸ்ப்ளோரர்', 'స్టాప్ ఎక్స్‌ప్లోరర్',
+    ]);
+  return isExplicitExplorer ? { routeNumber: null, isExplorerCommand: true } : null;
 }
 
 export function extractNavigationPlace(raw = '') {
@@ -538,6 +648,60 @@ export function parseIntent(transcript = '', options = {}) {
 
   if (isBusStandNavigation && !navPlace) {
     return makeResult(INTENTS.NAVIGATION, 0.95, { place: 'Nearest Bus Stop' });
+  }
+
+  // 8b. Source to Destination BMTC Trip Planning (e.g. "bus from Majestic to Whitefield", "plan a trip to Silk Board", "trip planner")
+  const srcDst = extractSourceDestination(raw);
+  const isTripPlannerQuery =
+    hasAnyPhrase(text, [
+      'trip planner', 'open trip planner', 'plan a trip', 'plan trip', 'bus trip planner', 'bmtc trip planner',
+      'plan my trip', 'plan journey', 'commute planner',
+      'ಟ್ರಿಪ್ ಪ್ಲಾನರ್', 'ಪ್ರಯಾಣ ಯೋಜನೆ', 'ಪ್ರಯಾಣ ಯೋಜಿಸಿ', 'ಟ್ರಿಪ್ ಪ್ಲಾನ್', 'ಬಸ್ ಪ್ರಯಾಣ ಯೋಜನೆ',
+      'ट्रिप प्लानर', 'यात्रा योजना', 'यात्रा प्लानर', 'ट्रिप प्लान', 'बस यात्रा योजना',
+      'ட்ரிப் பிளானர்', 'பயண திட்டம்',
+      'ట్రిప్ ప్లానర్', 'ప్రయాణ ప్రణాళిక',
+    ]);
+
+  if (srcDst && (srcDst.source || srcDst.destination)) {
+    return makeResult(INTENTS.BMTC_SOURCE_DESTINATION, 0.98, {
+      source: srcDst.source || null,
+      destination: srcDst.destination || null,
+      openMenu: false,
+    });
+  }
+
+  if (isTripPlannerQuery) {
+    return makeResult(INTENTS.BMTC_SOURCE_DESTINATION, 0.98, {
+      source: null,
+      destination: null,
+      openMenu: true,
+    });
+  }
+
+  // 8c. Route Stops Query & Stop Explorer (e.g. "what are the stops for 500D", "stop explorer for 500D", "explore stops")
+  const stopsQuery = extractRouteStopsQuery(raw);
+  const isStopExplorerQuery =
+    hasAnyPhrase(text, [
+      'stop explorer', 'open stop explorer', 'explore stops', 'explore bus stops', 'explore nearby stops',
+      'show stop explorer', 'stops explorer',
+      'ಸ್ಟಾಪ್ ಎಕ್ಸ್‌ಪ್ಲೋರರ್', 'ನಿಲ್ದಾಣಗಳ ಅನ್ವೇಷಣೆ', 'ಸ್ಟಾಪ್ ಲಿಸ್ಟ್',
+      'स्टॉप एक्सप्लोरर', 'स्टॉप सूची', 'बस स्टॉप एक्सप्लोरर',
+      'ஸ்டாப் எக்ஸ்ப்ளோரர்', 'நிறுத்தங்கள் எக்ஸ்ப்ளோரர்',
+      'స్టాప్ ఎక్స్‌ప్లోరర్', 'స్టాప్స్ ఎక్స్‌ప్లోరర్',
+    ]);
+
+  if (stopsQuery && stopsQuery.routeNumber) {
+    return makeResult(INTENTS.BMTC_ROUTE_STOPS, 0.98, {
+      routeNumber: stopsQuery.routeNumber,
+      isExplorerCommand: true,
+    });
+  }
+
+  if (isStopExplorerQuery || stopsQuery?.isExplorerCommand) {
+    return makeResult(INTENTS.BMTC_ROUTE_STOPS, 0.98, {
+      routeNumber: null,
+      isExplorerCommand: true,
+    });
   }
 
   const mentionsBus =

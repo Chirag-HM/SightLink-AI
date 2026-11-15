@@ -101,19 +101,36 @@ async function apiRequest(endpoint, options = {}) {
   });
 
   const text = await response.text();
+  const trimmed = (text || '').trim();
+  const isHtml = trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<head');
   let data = null;
   try {
-    data = text ? JSON.parse(text) : null;
+    data = (!isHtml && trimmed) ? JSON.parse(trimmed) : null;
   } catch {
-    data = { detail: text };
+    data = null;
   }
 
   if (!response.ok) {
-    const err = new Error(data?.detail || data?.message || `HTTP ${response.status}`);
+    let message = data?.detail || data?.message;
+    if (!message || isHtml) {
+      if (response.status === 404) {
+        message = 'Requested transit stop or route was not found.';
+      } else if (response.status >= 500) {
+        message = 'Transit service is temporarily unavailable. Please retry.';
+      } else {
+        message = `Request failed (HTTP ${response.status}).`;
+      }
+    }
+    const err = new Error(typeof message === 'string' ? message : JSON.stringify(message));
     err.status = response.status;
     err.data = data;
     throw err;
   }
+
+  if (isHtml) {
+    throw new Error('Received unexpected HTML response from server.');
+  }
+
   return data;
 }
 
@@ -178,6 +195,22 @@ export const bmtcService = {
     apiRequest(`/voice-bus/${encodeURIComponent(route)}?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`),
   getBusDetails: (vehicleId) =>
     apiRequest(`/bus/${encodeURIComponent(vehicleId)}`),
+  getRouteStops: (route, latitude, longitude) => {
+    let q = `/route-stops/${encodeURIComponent(route)}`;
+    if (latitude != null && longitude != null) {
+      q += `?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`;
+    }
+    return apiRequest(q);
+  },
+  planTrip: (source, destination, latitude, longitude) => {
+    let q = `/trip-planner?source=${encodeURIComponent(source)}&destination=${encodeURIComponent(destination)}`;
+    if (latitude != null && longitude != null) {
+      q += `&user_lat=${encodeURIComponent(latitude)}&user_lng=${encodeURIComponent(longitude)}`;
+    }
+    return apiRequest(q);
+  },
+  getPopularStops: () => apiRequest('/popular-stops'),
+  getFareEstimate: (distanceKm) => apiRequest(`/fare-estimate?distance_km=${encodeURIComponent(distanceKm)}`),
 };
 
 // System Health
@@ -481,6 +514,28 @@ export const pushService = {
   getVapidKey: () => apiRequest('/api/push/vapid-public-key'),
   subscribe: (payload) =>
     apiRequest('/api/push/subscribe', { method: 'POST', body: JSON.stringify(payload) }),
+};
+
+// Google Health Connect Integration Service
+export const healthService = {
+  getSummary: (date) =>
+    apiRequest(`/api/health-connect/dashboard/summary${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  getTrends: (period = 'weekly') =>
+    apiRequest(`/api/health-connect/dashboard/trends?period=${encodeURIComponent(period)}`),
+  getStatus: () =>
+    apiRequest('/api/health-connect/status'),
+  getDevices: () =>
+    apiRequest('/api/health-connect/devices'),
+  generatePairCode: () =>
+    apiRequest('/api/health-connect/devices/pair-code', { method: 'POST' }),
+  unlinkDevice: (deviceId) =>
+    apiRequest(`/api/health-connect/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+  purgeHealthRecords: () =>
+    apiRequest('/api/health-connect/records', { method: 'DELETE' }),
+  getRawRecords: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiRequest(`/api/health-connect/records${q ? `?${q}` : ''}`);
+  },
 };
 
 // WebSocket connections for real-time data

@@ -10,6 +10,10 @@ import {
 } from './navigationHandler.js';
 import { handleBusInfoIntent } from './busHandler.js';
 import { handleNearestBusStopIntent } from './nearestBusStopHandler.js';
+import {
+  handleBmtcSourceDestinationIntent,
+  handleBmtcRouteStopsIntent,
+} from './bmtcTripHandler.js';
 import { handleFamilyIntent } from './familyHandler.js';
 import { handleWhereAmIIntent, handleWhatIsAheadIntent } from './locationHandler.js';
 import { handleControlOrConfirmationIntent } from './controlHandler.js';
@@ -25,6 +29,8 @@ export const INTENT_HANDLERS = {
   [INTENTS.NAV_STOP]: handleNavStopIntent,
   [INTENTS.NEAREST_BUS_STOP]: handleNearestBusStopIntent,
   [INTENTS.BUS_INFO]: handleBusInfoIntent,
+  [INTENTS.BMTC_SOURCE_DESTINATION]: handleBmtcSourceDestinationIntent,
+  [INTENTS.BMTC_ROUTE_STOPS]: handleBmtcRouteStopsIntent,
   [INTENTS.CALL_FAMILY]: handleFamilyIntent,
   [INTENTS.SEND_LOCATION]: handleFamilyIntent,
   [INTENTS.WHERE_AM_I]: handleWhereAmIIntent,

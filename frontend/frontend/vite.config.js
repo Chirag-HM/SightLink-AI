@@ -15,6 +15,11 @@ const sharedProxy = {
   '/speak-bus': { target: backendTarget, changeOrigin: true },
   '/speak-vehicle': { target: backendTarget, changeOrigin: true },
   '/routes': { target: backendTarget, changeOrigin: true },
+  '/route-stops': { target: backendTarget, changeOrigin: true },
+  '/trip-planner': { target: backendTarget, changeOrigin: true },
+  '/source-destination': { target: backendTarget, changeOrigin: true },
+  '/popular-stops': { target: backendTarget, changeOrigin: true },
+  '/fare-estimate': { target: backendTarget, changeOrigin: true },
 }
 
 export default defineConfig({

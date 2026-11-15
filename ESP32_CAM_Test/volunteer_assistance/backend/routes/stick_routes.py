@@ -443,6 +443,8 @@ async def monitor_esp8266_stick():
     from .assistant_routes import process_hardware_button_event
 
     logger.info("ESP8266 Smart Blind Stick background bridge active.")
+    last_hw_press = {"bus": 0.0, "ai": 0.0, "sos": 0.0}
+
     while True:
         try:
             if not stick_config_state.get("polling_enabled", True):
@@ -462,7 +464,7 @@ async def monitor_esp8266_stick():
             status_data = None
             try:
                 def _do_get():
-                    return requests.get(f"http://{ip}/status", timeout=0.8)
+                    return requests.get(f"http://{ip}/status", timeout=2.0)
                 resp = await loop.run_in_executor(None, _do_get)
                 if resp.status_code == 200:
                     status_data = resp.json()
@@ -488,12 +490,14 @@ async def monitor_esp8266_stick():
                 bus_pressed = bool(status_data.get("bus_button", False))
                 ai_pressed = bool(status_data.get("ai_button", False))
                 sos_pressed = bool(status_data.get("sos_button", False))
+                now_ts = loop.time()
 
-                if bus_pressed:
+                if bus_pressed and (now_ts - last_hw_press["bus"] > 1.2):
+                    last_hw_press["bus"] = now_ts
                     logger.info("ESP8266 Hardware Bus Button (D5) pressed!")
                     def _clear_bus():
                         try:
-                            requests.get(f"http://{ip}/button", timeout=0.5)
+                            requests.get(f"http://{ip}/button", timeout=1.0)
                         except Exception:
                             pass
                     await loop.run_in_executor(None, _clear_bus)
@@ -510,11 +514,12 @@ async def monitor_esp8266_stick():
                     finally:
                         db.close()
 
-                if ai_pressed:
+                if ai_pressed and (now_ts - last_hw_press["ai"] > 1.2):
+                    last_hw_press["ai"] = now_ts
                     logger.info("ESP8266 Hardware AI Voice Button (D6) pressed!")
                     def _clear_ai():
                         try:
-                            requests.get(f"http://{ip}/ai-button", timeout=0.5)
+                            requests.get(f"http://{ip}/ai-button", timeout=1.0)
                         except Exception:
                             pass
                     await loop.run_in_executor(None, _clear_ai)
@@ -531,11 +536,12 @@ async def monitor_esp8266_stick():
                     finally:
                         db.close()
 
-                if sos_pressed:
+                if sos_pressed and (now_ts - last_hw_press["sos"] > 1.2):
+                    last_hw_press["sos"] = now_ts
                     logger.info("ESP8266 Hardware SOS Button (D7) pressed!")
                     def _clear_sos():
                         try:
-                            requests.get(f"http://{ip}/sos-button", timeout=0.5)
+                            requests.get(f"http://{ip}/sos-button", timeout=1.0)
                         except Exception:
                             pass
                     await loop.run_in_executor(None, _clear_sos)

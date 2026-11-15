@@ -425,3 +425,105 @@ class FamilyNavigationEventRequest(BaseModel):
     destination_name: str = Field(..., min_length=1, max_length=200)
     distance_m: Optional[int] = Field(default=None, ge=0)
     eta_minutes: Optional[int] = Field(default=None, ge=0)
+
+
+# ── Google Health Connect Schemas ─────────────────────────────────────────────
+class PairingCodeResponse(BaseModel):
+    pairing_code: str
+    expires_at: datetime
+    expires_in_seconds: int
+
+
+class RegisterDeviceRequest(BaseModel):
+    pairing_code: str = Field(..., min_length=4, max_length=16)
+    device_name: str = Field(..., min_length=1, max_length=128)
+    device_model: Optional[str] = Field(default=None, max_length=128)
+    os_version: Optional[str] = Field(default=None, max_length=32)
+    app_version: Optional[str] = Field(default="1.0.0", max_length=32)
+
+
+class RegisterDeviceResponse(BaseModel):
+    device_id: str
+    device_token: str
+    device_name: str
+    user_id: str
+    message: str
+
+
+class HealthRecordItem(BaseModel):
+    client_record_id: str = Field(..., min_length=1, max_length=128)
+    record_type: str = Field(..., min_length=1, max_length=48)
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    value_num: Optional[float] = None
+    secondary_value_num: Optional[float] = None
+    unit: str = Field(..., min_length=1, max_length=24)
+    data_source: Optional[str] = Field(default=None, max_length=128)
+    metadata_json: Optional[str] = None
+
+
+class HealthSyncBatchRequest(BaseModel):
+    device_token: Optional[str] = None
+    records: List[HealthRecordItem]
+    sync_trigger: Optional[str] = "periodic"
+
+
+class HealthSyncBatchResponse(BaseModel):
+    status: str
+    records_received: int
+    records_inserted: int
+    records_updated: int
+    synced_at: datetime
+
+
+class HealthConsentItem(BaseModel):
+    permission_name: str
+    granted: bool
+
+
+class UpdateConsentsRequest(BaseModel):
+    device_token: Optional[str] = None
+    consents: List[HealthConsentItem]
+
+
+class DailyHealthSummaryResponse(BaseModel):
+    date: str
+    steps: Optional[int] = None
+    active_calories: Optional[float] = None
+    total_calories: Optional[float] = None
+    distance_meters: Optional[float] = None
+    avg_heart_rate: Optional[float] = None
+    min_heart_rate: Optional[float] = None
+    max_heart_rate: Optional[float] = None
+    resting_heart_rate: Optional[float] = None
+    sleep_duration_minutes: Optional[int] = None
+    sleep_stages: Optional[dict] = None
+    spo2_avg: Optional[float] = None
+    systolic_avg: Optional[float] = None
+    diastolic_avg: Optional[float] = None
+    exercise_duration_minutes: Optional[int] = None
+    last_synced_at: Optional[datetime] = None
+
+
+class HealthTrendsResponse(BaseModel):
+    period: str  # daily, weekly, monthly
+    data_points: List[DailyHealthSummaryResponse]
+    summary_averages: dict
+
+
+class ConnectedDeviceResponse(BaseModel):
+    id: str
+    device_name: str
+    device_model: Optional[str] = None
+    os_version: Optional[str] = None
+    app_version: Optional[str] = None
+    is_active: bool
+    last_synced_at: Optional[datetime] = None
+    created_at: datetime
+    consents: List[HealthConsentItem] = []
+
+
+class DeleteHealthDataResponse(BaseModel):
+    status: str
+    deleted_records_count: int
+    message: str

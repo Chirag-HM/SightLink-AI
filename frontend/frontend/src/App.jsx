@@ -26,6 +26,7 @@ const VolunteersPage = lazy(() => import('./pages/VolunteersPage'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const AccessibilityPage = lazy(() => import('./pages/AccessibilityPage'));
+const HealthMonitoringPage = lazy(() => import('./pages/HealthMonitoringPage'));
 
 function PageLoader() {
   return (
@@ -93,6 +94,7 @@ function AppShell() {
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/accessibility" element={<AccessibilityPage />} />
+            <Route path="/health" element={<HealthMonitoringPage />} />
           </Routes>
         </Suspense>
       </div>

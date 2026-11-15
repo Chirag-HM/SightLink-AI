@@ -36,6 +36,7 @@ from .routes.assistant_routes import (
     router as assistant_router,
     process_hardware_button_event,
 )
+from .routes.health_routes import router as health_router
 from .schemas import HardwareButtonEventRequest
 from .telegram_bot import router as telegram_router, poll_telegram_updates_once, telegram_bot
 from .gmail_sender import gmail_sender
@@ -203,6 +204,7 @@ app.include_router(telegram_router)
 app.include_router(bmtc_router)
 app.include_router(bus_router)
 app.include_router(assistant_router)
+app.include_router(health_router)
 
 
 # ── Real-Time WebSocket Endpoints ─────────────────────────────────────────────

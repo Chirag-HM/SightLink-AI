@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SightLink Health Companion</string>
+    <string name="health_rationale_desc">SightLink AI requires read access to your authorized Health Connect records (steps, heart rate, sleep, oxygen, blood pressure) to display them on your accessible personal dashboard.</string>
+</resources>
+

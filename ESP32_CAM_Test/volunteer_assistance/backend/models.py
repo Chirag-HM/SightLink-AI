@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Enum as SQLEnum, Text
+    Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Enum as SQLEnum, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -61,6 +61,9 @@ class User(Base):
     accepted_requests = relationship("AssistanceRequest", foreign_keys="AssistanceRequest.accepted_by_id", back_populates="accepted_volunteer")
     family_share_session = relationship("FamilyShareSession", back_populates="blind_user", uselist=False, cascade="all, delete-orphan")
     telegram_link = relationship("TelegramLink", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    connected_devices = relationship("ConnectedDevice", back_populates="user", cascade="all, delete-orphan")
+    health_records = relationship("HealthRecord", back_populates="user", cascade="all, delete-orphan")
+    health_summaries = relationship("HealthDailySummary", back_populates="user", cascade="all, delete-orphan")
 
 
 class VolunteerProfile(Base):
@@ -472,3 +475,109 @@ class AssistantCommandLog(Base):
     status = Column(String(24), default="success", nullable=False)
     source = Column(String(32), default="voice", nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ConnectedDevice(Base):
+    __tablename__ = "connected_devices"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_name = Column(String(128), nullable=False)
+    device_model = Column(String(128), nullable=True)
+    os_version = Column(String(32), nullable=True)
+    app_version = Column(String(32), nullable=True)
+    device_token = Column(String(128), unique=True, index=True, nullable=False)
+    pairing_code = Column(String(16), unique=True, index=True, nullable=True)
+    pairing_code_expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_synced_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="connected_devices")
+    health_records = relationship("HealthRecord", back_populates="device")
+    consents = relationship("HealthConsent", back_populates="device", cascade="all, delete-orphan")
+
+
+class HealthConsent(Base):
+    __tablename__ = "health_consents"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(String(36), ForeignKey("connected_devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission_name = Column(String(64), nullable=False, index=True)  # Steps, HeartRate, SleepSession, etc.
+    granted = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    device = relationship("ConnectedDevice", back_populates="consents")
+
+    __table_args__ = (
+        UniqueConstraint("device_id", "permission_name", name="uq_device_permission"),
+    )
+
+
+class HealthRecord(Base):
+    __tablename__ = "health_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(String(36), ForeignKey("connected_devices.id", ondelete="SET NULL"), nullable=True, index=True)
+    record_type = Column(String(48), nullable=False, index=True)  # steps, heart_rate, resting_heart_rate, sleep_session, etc.
+    client_record_id = Column(String(128), nullable=False, index=True)
+    start_time = Column(DateTime, nullable=True, index=True)
+    end_time = Column(DateTime, nullable=True, index=True)
+    value_num = Column(Float, nullable=True)
+    secondary_value_num = Column(Float, nullable=True)  # diastolic mmHg
+    unit = Column(String(24), nullable=False)
+    data_source = Column(String(128), nullable=True)  # package name / wearable
+    metadata_json = Column(Text, nullable=True)
+    synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    user = relationship("User", back_populates="health_records")
+    device = relationship("ConnectedDevice", back_populates="health_records")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_record_id", name="uq_user_client_record"),
+    )
+
+
+class HealthDailySummary(Base):
+    __tablename__ = "health_daily_summaries"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    steps = Column(Integer, nullable=True)
+    active_calories = Column(Float, nullable=True)
+    total_calories = Column(Float, nullable=True)
+    distance_meters = Column(Float, nullable=True)
+    avg_heart_rate = Column(Float, nullable=True)
+    min_heart_rate = Column(Float, nullable=True)
+    max_heart_rate = Column(Float, nullable=True)
+    resting_heart_rate = Column(Float, nullable=True)
+    sleep_duration_minutes = Column(Integer, nullable=True)
+    sleep_stages_json = Column(Text, nullable=True)
+    spo2_avg = Column(Float, nullable=True)
+    systolic_avg = Column(Float, nullable=True)
+    diastolic_avg = Column(Float, nullable=True)
+    exercise_duration_minutes = Column(Integer, nullable=True)
+    last_synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="health_summaries")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uq_user_summary_date"),
+    )
+
+
+class HealthSyncHistory(Base):
+    __tablename__ = "health_sync_history"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(String(36), ForeignKey("connected_devices.id", ondelete="SET NULL"), nullable=True, index=True)
+    synced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    records_received = Column(Integer, default=0, nullable=False)
+    records_inserted = Column(Integer, default=0, nullable=False)
+    status = Column(String(24), default="success", nullable=False)
+    error_detail = Column(Text, nullable=True)

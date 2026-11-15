@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: sightlink-ai
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sightlink-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: APP_PUBLIC_URL
+        value: https://sightlink-ai.onrender.com
+
+databases:
+  - name: sightlink-db
+    plan: free
+    region: oregon
+    databaseName: sightlink
+    user: sightlink_user

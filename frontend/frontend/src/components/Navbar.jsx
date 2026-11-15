@@ -9,6 +9,7 @@ const primaryLinks = [
   { label: 'Eyes on Demand', to: '/live-assist' },
   { label: 'Volunteers', to: '/volunteers' },
   { label: 'Family Tracking', to: '/contacts' },
+  { label: 'Health', to: '/health' },
   { label: 'Dashboard', to: '/dashboard' },
 ];
 
